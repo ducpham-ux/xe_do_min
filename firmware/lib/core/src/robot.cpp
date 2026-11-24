@@ -20,6 +20,7 @@ Robot::Robot(Hal& hal, const Params& p)
 }
 
 void Robot::enter(State s) {
+  if (s == State::Recover) lineFound_.reset();
   state_ = s;
   stateAt_ = hal_.millis();
 }
@@ -97,7 +98,7 @@ void Robot::tick() {
     case State::Follow: doFollow(now, bits, dt); break;
     case State::NodeScan: doNodeScan(now, bits, dt); break;
     case State::Turn: doTurn(now, bits); break;
-    case State::ScanObject: doScanObject(now); break;
+    case State::ScanObject: doScanObject(now, dt); break;
     case State::AlertOn: doAlert(now); break;
     case State::Grip: doGrip(now); break;
     case State::Recover: doRecover(now, bits); break;
@@ -126,9 +127,10 @@ void Robot::drive(int16_t l, int16_t r) {
 }
 
 void Robot::advance(int16_t l, int16_t r, float dt) {
-  float nominal = (l + r) * 0.5f;
-  if (nominal <= 0) return;
-  float ds = vEst_ * (nominal / p_.baseSpeed) * dt;
+  // vận tốc ~ (PWM - vùng chết), chuẩn hóa theo baseSpeed
+  float eff = (l + r) * 0.5f - p_.pwmDeadband;
+  if (eff <= 0) return;
+  float ds = vEst_ * (eff / (p_.baseSpeed - p_.pwmDeadband)) * dt;
   dist_ += ds;
   odo_ += ds;
 }
@@ -160,6 +162,7 @@ void Robot::doFollow(uint32_t now, uint8_t bits, float dt) {
       scanSide_ = s;
       drive(0, 0);
       samples_ = 0; sampleErrors_ = 0;
+      scanStartOdo_ = odo_; scanLowRun_ = 0;
       vote_.reset();
       nextSampleAt_ = now + p_.settleMs;
       enter(State::ScanObject);
@@ -219,7 +222,9 @@ void Robot::doNodeScan(uint32_t now, uint8_t bits, float dt) {
   drive(p_.scanSpeed, p_.scanSpeed);
   advance(cmdL_, cmdR_, dt);
   nd_.accumulate(bits);
-  if (now - stateAt_ < p_.scanTimeMs) return;
+  uint32_t t = now - stateAt_;
+  bool done = p_.crawlCm > 0 ? (dist_ - learnDist_ >= p_.crawlCm || t > 1500) : t >= p_.scanTimeMs;
+  if (!done) return;
   NodeShape shape = nd_.finish(bits);
   nd_.reset();
   if (!shape.isNode()) {
@@ -306,14 +311,18 @@ void Robot::startTurn(uint32_t, Act a, bool deadEnd) {
   } else {
     heading_ = applyAct(heading_, a);
     int8_t nb = neighbor(node_, heading_);
+    float crawled = dist_ - learnDist_;  // quãng đã bò kể từ lúc phát hiện nút
     lastNode_ = node_;
     node_ = nb >= 0 ? (uint8_t)nb : node_;
     edgeLen_ = (nb >= 0 && nb < kNumNodes) ? p_.edgeLenCm : 40;
-    dist_ = 0;
+    // đi thẳng: trục bánh chưa tới tâm nút; quay tại chỗ: trục coi như ở tâm cung mới
+    dist_ = (a == Act::Straight) ? crawled - p_.sensorAheadCm : 0;
+    if (dist_ > 0) dist_ = 0;
     learnOk_ = nb >= 0 && nb < kNumNodes;
   }
   turnAct_ = a;
   turnPhase_ = 0;
+  lineFound_.reset();
   pid_.reset();
   lastPos_ = 0;
   if (a == Act::Straight) {
@@ -330,14 +339,14 @@ void Robot::doTurn(uint32_t now, uint8_t bits) {
   uint16_t minMs = turnAct_ == Act::UTurn ? p_.uturnMinMs : p_.turnMinMs;
   if (t > p_.turnTimeoutMs) { hal_.log("quay qua lau -> tim line"); enter(State::Recover); return; }
   switch (turnPhase_) {
-    case 0:
+    case 0:  // quay nhanh trong thời gian tối thiểu: rời line cũ, bỏ qua vùng giao cắt
       drive((int16_t)(dir * p_.turnSpeed), (int16_t)(-dir * p_.turnSpeed));
-      if (t >= minMs) turnPhase_ = 1;
+      if (t >= minMs) { turnPhase_ = 1; lineFound_.reset(); }
       break;
-    case 1: {
+    case 1: {  // quay chậm tìm line mới (cần 2 mẫu liên tiếp)
       drive((int16_t)(dir * p_.turnSlowSpeed), (int16_t)(-dir * p_.turnSlowSpeed));
       uint8_t want = kM | (dir < 0 ? kL1 : kR1);
-      if (bits & want) {
+      if (lineFound_.feed((bits & want) != 0)) {
         drive((int16_t)(-dir * p_.brakePwm), (int16_t)(dir * p_.brakePwm));  // phanh ngược
         turnPhase_ = 2;
         phaseAt_ = now;
@@ -355,7 +364,7 @@ void Robot::doTurn(uint32_t now, uint8_t bits) {
 
 void Robot::doRecover(uint32_t now, uint8_t bits) {
   uint32_t t = now - stateAt_;
-  if (bits & (kL1 | kM | kR1)) { pid_.reset(); lastCtrl_ = now; enter(State::Follow); return; }
+  if (lineFound_.feed((bits & (kL1 | kM | kR1)) != 0)) { pid_.reset(); lastCtrl_ = now; enter(State::Follow); return; }
   if (t > p_.recoverTimeoutMs) {
     // không tìm lại được line: coi như ngõ cụt -> quay đầu; định vị không còn tin cậy
     if (nav_ == NavMode::Map) { nav_ = NavMode::Fallback; stats_.fallback = true; hal_.log("NGO CUT ngoai du kien -> du phong"); }
@@ -383,9 +392,13 @@ float Robot::sFromLow() const {
   return clampf(s, 0, edgeLen_);
 }
 
-void Robot::doScanObject(uint32_t now) {
-  drive(0, 0);
-  if (now >= nextSampleAt_ && samples_ < p_.colorSamples) {
+void Robot::doScanObject(uint32_t now, float dt) {
+  // Quét trượt: dừng ngắn, rồi bò chậm qua vật trong khi lấy mẫu màu.
+  if (now - stateAt_ < p_.settleMs) drive(0, 0);
+  else drive(p_.creepPwm, p_.creepPwm);
+  advance(cmdL_, cmdR_, dt);
+  scanLowRun_ = hal_.obstacle(scanSide_) ? 0 : (uint8_t)(scanLowRun_ < 255 ? scanLowRun_ + 1 : 255);
+  if (now >= nextSampleAt_ && samples_ < 255) {
     RawColor c;
     if (hal_.readColor(scanSide_, c)) {
       vote_.add(isRedSample(sensorOf(scanSide_), c, p_, cal_));
@@ -398,19 +411,23 @@ void Robot::doScanObject(uint32_t now) {
     nextSampleAt_ = now + p_.colorGapMs;
   }
   bool enough = vote_.reds() >= p_.colorNeed;
-  bool hopeless = (uint8_t)(vote_.reds() + (p_.colorSamples - samples_)) < p_.colorNeed;
-  if (!enough && !hopeless && samples_ < p_.colorSamples) return;
+  bool passed = odo_ - scanStartOdo_ >= p_.creepMaxCm || (scanLowRun_ >= 3 && samples_ >= 3);
+  if (!enough && !passed) return;
+  drive(0, 0);
 
   char buf[72];
+  snprintf(buf, sizeof buf, "quet %s: %u/%u mau do, c%d s=%.0f", scanSide_ == Side::Left ? "T" : "P", vote_.reds(), samples_, currentEdge() + 1, (double)sFromLow());
+  hal_.log(buf);
   if (sampleErrors_ == samples_ && samples_ > 0) {
     snprintf(buf, sizeof buf, "LOI cam bien mau %s", scanSide_ == Side::Left ? "TRAI" : "PHAI");
     hal_.log(buf);
   }
   if (enough) {
     int8_t e = currentEdge();
-    bool fresh = (e < 0 || nav_ == NavMode::Fallback) ? true : tracker_.isNew((uint8_t)e, scanSide_, sFromLow());
+    Side es = edgeSide(scanSide_, lastNode_ < node_ || lastNode_ == kStart);
+    bool fresh = (e < 0 || nav_ == NavMode::Fallback) ? true : tracker_.isNew((uint8_t)e, es, sFromLow());
     if (fresh) {
-      if (e >= 0 && nav_ == NavMode::Map) tracker_.mark((uint8_t)e, scanSide_, sFromLow());
+      if (e >= 0 && nav_ == NavMode::Map) tracker_.mark((uint8_t)e, es, sFromLow());
       stats_.alerts++;
       alert_.start(now, p_.alertMs);
       hal_.buzzer(true);

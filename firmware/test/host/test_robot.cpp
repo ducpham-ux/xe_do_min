@@ -169,3 +169,49 @@ TEST(robot_calib_mode_learns_red_on_both_sensors) {
   CHECK(h.saved.has(Sensor::Tcs34725, kPurple));
   CHECK(r.state() == State::Goal);
 }
+
+TEST(robot_creeps_past_object_edge_to_read_color) {
+  // E18 kích ở mép vật: vài mẫu đầu cảm biến màu chưa nhìn thấy vật (đọc ra nền)
+  Params p; FakeHal h; Robot r(h, p);
+  r.begin(BootMode::Run);
+  run(r, h, 1500);
+  h.color[0] = green3200();
+  h.obs[0] = true;
+  run(r, h, 120);
+  CHECK(r.state() == State::ScanObject);
+  run(r, h, 100);
+  CHECK(h.ml > 0); CHECK(h.mr > 0);       // đang bò chậm tới
+  CHECK(h.ml < p.baseSpeed);
+  h.color[0] = red3200();                   // cảm biến đã nhìn thẳng vào vật
+  run(r, h, 400);
+  CHECK(r.state() == State::AlertOn);
+  CHECK_EQ(h.ml, 0);                        // dừng hẳn khi kêu còi
+}
+
+TEST(robot_creep_scan_gives_up_when_e18_clears) {
+  Params p; FakeHal h; Robot r(h, p);
+  r.begin(BootMode::Run);
+  run(r, h, 1500);
+  h.color[0] = green3200();
+  h.obs[0] = true;
+  run(r, h, 200);
+  h.obs[0] = false;
+  run(r, h, 200);
+  CHECK(r.state() == State::Follow);
+  CHECK_EQ(h.buzRises, 0);
+}
+
+TEST(robot_crawl_by_distance_into_node_center) {
+  // crawlCm > 0: bò vào nút theo quãng đường ước lượng thay vì thời gian cố định
+  Params p; p.crawlCm = 10; p.startStubCm = 0; FakeHal h; Robot r(h, p);
+  r.begin(BootMode::Run);
+  run(r, h, 1100);
+  h.line = kL2 | kL1 | kM | kR1 | kR2;      // vạch ngang của nút H
+  run(r, h, 5);
+  CHECK(r.state() == State::NodeScan);
+  run(r, h, 200);                            // 200 ms chưa đủ 10 cm ở tốc độ bò
+  CHECK(r.state() == State::NodeScan);
+  h.line = kM;
+  run(r, h, 600);
+  CHECK(r.state() != State::NodeScan);
+}

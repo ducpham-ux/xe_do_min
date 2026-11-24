@@ -67,3 +67,13 @@ TEST(backup_keeps_start_stub_objects) {
   CHECK(decodeBackup(regs, cov, u, r));
   CHECK(!u.isNew(kStartStubEdge, Side::Left, 22));
 }
+
+TEST(tracker_side_is_relative_to_edge_not_robot) {
+  // cùng 1 vật: đi A->D (từ nút nhỏ sang lớn) thấy bên PHẢI xe; đi D->A thấy bên TRÁI xe
+  CHECK(edgeSide(Side::Right, true) == Side::Right);
+  CHECK(edgeSide(Side::Left, false) == Side::Right);
+  CHECK(edgeSide(Side::Right, false) == Side::Left);
+  Params p; ObjectTracker t(p);
+  t.mark(2, edgeSide(Side::Right, true), 66);
+  CHECK(!t.isNew(2, edgeSide(Side::Left, false), 66));
+}

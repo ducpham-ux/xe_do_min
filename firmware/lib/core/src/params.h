@@ -35,11 +35,13 @@ struct Params {
   float startStubCm = 30.0f;      // nhánh XUẤT PHÁT -> nút H (ước lượng)
   int16_t scanSpeed = 95;         // (đã đo thật)
   uint16_t scanTimeMs = 135;      // (đã đo thật) bò vào tâm nút, chỉnh 120-155
+  float crawlCm = 0.0f;           // >0: bò theo QUÃNG ĐƯỜNG (cm) thay vì thời gian -> không phụ thuộc pin.
+                                  //     Đặt = khoảng cách từ trục bánh tới vạch khi nút được phát hiện.
 
   // ---------- Quay ----------
   int16_t turnSpeed = 110;        // (đã đo thật)
   int16_t turnSlowSpeed = 85;     // (đã đo thật) tốc độ tìm line mới
-  uint16_t turnMinMs = 200;       // bỏ qua line trong thời gian này (tránh cung loa bo)
+  uint16_t turnMinMs = 200;       // quay nhanh tối thiểu: rời line cũ, bỏ qua vùng giao cắt/loa bo
   uint16_t uturnMinMs = 550;      // quay đầu: thời gian tối thiểu trước khi nhận line
   uint16_t turnTimeoutMs = 1800;
   uint16_t brakeMs = 25;          // (đã đo thật) phanh ngược
@@ -47,6 +49,7 @@ struct Params {
 
   // ---------- Ước lượng vận tốc (không có encoder) ----------
   float vBaseCmS = 40.0f;         // vận tốc ước lượng ở baseSpeed (đo bằng chế độ TEST)
+  float pwmDeadband = 30.0f;      // PWM dưới mức này bánh không quay (đo bằng chế độ TEST)
   float vLearnAlpha = 0.3f;       // tốc độ học từ thời gian chạy hết cung
   bool adaptSpeed = true;         // tự chỉnh PWM để giữ vận tốc mục tiêu khi pin thay đổi
   float adaptMin = 0.85f, adaptMax = 1.20f;
@@ -54,10 +57,11 @@ struct Params {
   // ---------- Vật cản E18 + màu ----------
   uint8_t obstacleDebounce = 3;   // mẫu (1 ms) liên tiếp
   float obstacleRearmCm = 8.0f;   // sau khi xử lý 1 vật, bỏ qua bên đó thêm 8 cm
-  uint8_t colorSamples = 6;       // (đã đo thật) 6 mẫu x 35 ms
-  uint8_t colorNeed = 4;          // cần >= 4/6 mẫu đỏ
+  uint8_t colorNeed = 4;          // cần >= 4 mẫu đỏ trong lúc quét trượt
   uint16_t colorGapMs = 35;       // (đã đo thật)
-  uint16_t settleMs = 30;         // chờ xe đứng yên trước khi đọc màu
+  uint16_t settleMs = 30;         // dừng ngắn trước khi đọc màu
+  int16_t creepPwm = 75;          // quét trượt: bò chậm qua vật trong khi đọc màu
+  float creepMaxCm = 8.0f;        // bò tối đa 8 cm (E18 thường kích ở MÉP vật)
   // Ngưỡng mặc định (đã đo thật)
   uint16_t t3200MaxR = 450;       // chu kỳ kênh đỏ (us) phải nhỏ hơn
   float t3200Ratio = 0.55f;       // r < g*ratio && r < b*ratio

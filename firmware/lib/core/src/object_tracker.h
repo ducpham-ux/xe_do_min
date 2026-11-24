@@ -8,6 +8,13 @@
 
 namespace core {
 
+// Đổi "bên của xe" thành "bên của cung" (nhìn theo chiều từ nút chỉ số nhỏ sang lớn),
+// để cùng một vật luôn có cùng khóa dù xe đi chiều nào.
+inline Side edgeSide(Side robotSide, bool lowToHigh) {
+  if (lowToHigh) return robotSide;
+  return robotSide == Side::Left ? Side::Right : Side::Left;
+}
+
 class ObjectTracker {
  public:
   static constexpr uint8_t kMax = 16;

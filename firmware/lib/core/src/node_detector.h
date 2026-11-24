@@ -18,6 +18,16 @@ struct NodeShape {
   bool operator==(const NodeShape& o) const { return left == o.left && right == o.right && straight == o.straight; }
 };
 
+// Xác nhận một điều kiện khi nó đúng N mẫu liên tiếp (lọc nhiễu 1 mẫu của cảm biến số).
+class Confirm {
+ public:
+  explicit Confirm(uint8_t need) : need_(need) {}
+  bool feed(bool hit) { run_ = hit ? (uint8_t)(run_ < 255 ? run_ + 1 : 255) : 0; return run_ >= need_; }
+  void reset() { run_ = 0; }
+ private:
+  uint8_t need_, run_ = 0;
+};
+
 class NodeDetector {
  public:
   explicit NodeDetector(const Params& p) : p_(p) {}
@@ -31,6 +41,7 @@ class NodeDetector {
   const Params& p_;
   uint8_t run_ = 0;
   bool sawL_ = false, sawR_ = false;
+  uint8_t runL_ = 0, runR_ = 0;  // số mẫu liên tiếp (lọc nhiễu 1 mẫu)
 };
 
 }  // namespace core

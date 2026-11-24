@@ -53,7 +53,7 @@ class Robot {
   void doFollow(uint32_t now, uint8_t bits, float dt);
   void doNodeScan(uint32_t now, uint8_t bits, float dt);
   void doTurn(uint32_t now, uint8_t bits);
-  void doScanObject(uint32_t now);
+  void doScanObject(uint32_t now, float dt);
   void doAlert(uint32_t now);
   void doGrip(uint32_t now);
   void doRecover(uint32_t now, uint8_t bits);
@@ -106,6 +106,7 @@ class Robot {
   Act turnAct_ = Act::Straight;
   uint8_t turnPhase_ = 0;
   uint32_t phaseAt_ = 0;
+  Confirm lineFound_{2};
 
   // vật cản
   uint8_t obsRun_[2] = {0, 0};
@@ -116,6 +117,8 @@ class Robot {
   ColorVote vote_;
   uint32_t nextSampleAt_ = 0;
   uint16_t sampleErrors_ = 0;
+  float scanStartOdo_ = 0;
+  uint8_t scanLowRun_ = 0;
 
   // gắp / calib
   uint8_t gripStep_ = 0;

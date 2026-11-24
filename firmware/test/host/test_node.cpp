@@ -25,6 +25,7 @@ TEST(node_scan_left_with_straight) {
   NodeDetector d(p);
   d.beginScan();
   d.accumulate(kL2 | kL1 | kM);
+  d.accumulate(kL2 | kM);
   d.accumulate(kL1 | kM);
   NodeShape s = d.finish(kM);
   CHECK(s.left); CHECK(!s.right); CHECK(s.straight);
@@ -35,6 +36,7 @@ TEST(node_scan_right_corner_no_straight) {
   NodeDetector d(p);
   d.beginScan();
   d.accumulate(kR2 | kR1 | kM);
+  d.accumulate(kR2 | kR1);
   NodeShape s = d.finish(0);
   CHECK(!s.left); CHECK(s.right); CHECK(!s.straight);
 }
@@ -46,3 +48,27 @@ TEST(node_shape_counts_branches) {
   NodeShape none{false, false, true};
   CHECK(!none.isNode());
 }
+
+TEST(node_scan_ignores_single_sample_glitch) {
+  Params p;
+  NodeDetector d(p);
+  d.beginScan();
+  d.accumulate(kR2 | kR1 | kM);
+  d.accumulate(kR2 | kM);
+  d.accumulate(kL2 | kM);          // 1 mẫu nhiễu ở L2
+  d.accumulate(kM);
+  NodeShape s = d.finish(0);
+  CHECK(s.right);
+  CHECK(!s.left);
+}
+
+TEST(confirm_requires_consecutive_hits) {
+  Confirm c(2);
+  CHECK(!c.feed(true));
+  CHECK(!c.feed(false));   // nhiễu 1 mẫu bị bỏ
+  CHECK(!c.feed(true));
+  CHECK(c.feed(true));     // 2 mẫu liên tiếp
+  c.reset();
+  CHECK(!c.feed(true));
+}
+
