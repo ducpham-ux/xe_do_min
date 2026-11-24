@@ -32,8 +32,14 @@ static core::BootMode readBootMode() {
   return core::BootMode::Run;
 }
 
+// chờ nhưng vẫn nạp lại watchdog (watchdog reset nếu treo quá 0,5 s)
+static void waitMs(uint32_t ms) {
+  uint32_t t0 = millis();
+  while (millis() - t0 < ms) { delay(5); IWatchdog.reload(); }
+}
+
 static void beep(int n, int ms) {
-  for (int i = 0; i < n; ++i) { hal.buzzer(true); delay(ms); hal.buzzer(false); delay(ms); }
+  for (int i = 0; i < n; ++i) { hal.buzzer(true); waitMs(ms); hal.buzzer(false); waitMs(ms); }
 }
 
 // ---------------------------------------------------------------- chế độ TEST
@@ -45,19 +51,19 @@ static void runTest() {
   holdR = R ? (holdR ? holdR : now) : 0;
   // Che E18 trái 3 giây: chạy thẳng 2 giây ở baseSpeed -> đo quãng đường / 2 = vBaseCmS
   if (holdL && now - holdL > 3000) {
-    beep(1, 100); delay(1000);
+    beep(1, 100); waitMs(1000);
     hal.setMotors(params.baseSpeed, params.baseSpeed);
-    for (int i = 0; i < 200; ++i) { delay(10); IWatchdog.reload(); }
+    waitMs(2000);
     hal.setMotors(0, 0);
     holdL = 0;
   }
   // Che E18 phải 3 giây: quay trái turnMinMs rồi dừng -> đo góc đã quay
   if (holdR && now - holdR > 3000) {
-    beep(2, 100); delay(1000);
+    beep(2, 100); waitMs(1000);
     hal.setMotors(-params.turnSpeed, params.turnSpeed);
-    delay(params.turnMinMs);
+    waitMs(params.turnMinMs);
     hal.setMotors(params.brakePwm, -params.brakePwm);
-    delay(params.brakeMs);
+    waitMs(params.brakeMs);
     hal.setMotors(0, 0);
     holdR = 0;
   }

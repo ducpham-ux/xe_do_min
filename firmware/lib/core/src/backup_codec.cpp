@@ -16,7 +16,7 @@ uint16_t getBits(const uint16_t* words, uint16_t& pos, uint8_t bits) {
 }
 }  // namespace
 
-bool encodeBackup(uint16_t regs[kBackupRegs], uint16_t covered, const ObjectTracker& t, uint8_t restarts) {
+bool encodeBackup(uint16_t regs[kBackupRegs], uint16_t covered, const ObjectTracker& t, uint8_t restarts, uint16_t elapsedS) {
   for (uint8_t i = 0; i < kBackupRegs; ++i) regs[i] = 0;
   uint8_t n = t.count() > kBackupMaxObjects ? kBackupMaxObjects : t.count();
   regs[0] = (uint16_t)(0xA000u | (covered & 0x0FFFu));
@@ -28,10 +28,12 @@ bool encodeBackup(uint16_t regs[kBackupRegs], uint16_t covered, const ObjectTrac
     putBits(regs + 2, pos, (uint16_t)e.side, 1);
     putBits(regs + 2, pos, e.s, 8);
   }
+  pos = 117;
+  putBits(regs + 2, pos, elapsedS > 511 ? 511 : elapsedS, 9);
   return true;
 }
 
-bool decodeBackup(const uint16_t regs[kBackupRegs], uint16_t& covered, ObjectTracker& t, uint8_t& restarts) {
+bool decodeBackup(const uint16_t regs[kBackupRegs], uint16_t& covered, ObjectTracker& t, uint8_t& restarts, uint16_t* elapsedS) {
   if ((regs[0] & 0xF000u) != 0xA000u) return false;
   uint8_t n = regs[1] & 0xFFu;
   if (n > kBackupMaxObjects) return false;
@@ -46,6 +48,7 @@ bool decodeBackup(const uint16_t regs[kBackupRegs], uint16_t& covered, ObjectTra
     if (edge > kStartStubEdge) return false;
     t.mark(edge, side, s);
   }
+  if (elapsedS) { pos = 117; *elapsedS = getBits(regs + 2, pos, 9); }
   return true;
 }
 

@@ -13,7 +13,7 @@ d.cover("CUỘC THI ROBOT SINH VIÊN 2026 · “KMA_MÔI TRƯỜNG XANH”", "B�
         "Xe tự hành dò line phát hiện và gắp rác màu đỏ\nThiết kế phần cứng · Thuật toán · Triển khai phần mềm · Kiểm thử",
         [["Nền tảng", "STM32F103C8T6 · L298N + 4 động cơ DC · 5 TCRT5000 · 2 E18-D80NK · TCS3200 · TCS34725"],
          ["Phần mềm", "C++17, PlatformIO + Arduino (STM32duino); lõi thuật toán độc lập phần cứng"],
-         ["Kiểm chứng", "50 unit test; mô phỏng toàn sân 50 lượt ngẫu nhiên + 6 kịch bản lỗi; biên dịch chéo thành công"],
+         ["Kiểm chứng", "52 unit test; mô phỏng toàn sân 50 lượt ngẫu nhiên + 6 kịch bản lỗi; biên dịch chéo thành công"],
          ["Quy trình", "Superpowers: brainstorming → spec → plan → TDD → mô phỏng → debug có hệ thống → review"],
          ["Phiên bản", "v1.0 · 25/11/2026"]])
 d.h1("Mục lục"); d.toc(); d.page_break()
@@ -141,7 +141,7 @@ d.fig(H("fsm.png"), "Hình 9 – Máy trạng thái hành vi", 16)
 d.bullets([
     "**Cảnh báo 2,2 s** (dư 10% so với 2 s), còi + LED liên tục, động cơ dừng.",
     "**Watchdog 0,5 s**; mọi trạng thái đều có thời hạn; lỗi I2C → khôi phục bus (9 xung SCL) và tiếp tục chạy bằng cảm biến còn lại.",
-    "**Restart thông minh:** 10 thanh ghi Backup 16 bit lưu mặt nạ cung đã phủ, số lần restart và tối đa 9 vật đỏ (13 bit/vật). Giữ nguyên khi nhấn RESET, tự mất khi tắt nguồn (dùng cờ POR để phân biệt).",
+    "**Restart thông minh:** 10 thanh ghi Backup 16 bit lưu mặt nạ cung đã phủ, số lần restart, tối đa 9 vật đỏ (13 bit/vật) và **số giây thi đã trôi qua** (ghi mỗi 5 s), để mốc 4:00/5:00 vẫn đúng sau restart vì đồng hồ trọng tài chạy liên tục. Giữ nguyên khi nhấn RESET, tự mất khi tắt nguồn (dùng cờ POR để phân biệt).",
     "**Chế độ dự phòng:** nếu định vị sai, xe dùng lại thuật toán bám phải + phá vòng lặp đã chạy được của bản cũ.",
 ])
 d.h2("4.9. Vòng 2 – gắp và đếm rác")
@@ -169,7 +169,7 @@ d.h2("5.2. Quy trình phát triển (Superpowers)")
 d.fig(H("quy_trinh.png"), "Hình 11 – Quy trình phát triển", 16.5)
 d.bullets([
     "**Spec và Plan** được lưu trong `docs/superpowers/` để ai cũng đọc lại được lý do của từng quyết định.",
-    "**TDD:** mỗi chức năng có test viết trước, chạy để thấy test FAIL, rồi mới viết code cho tới khi PASS. Tổng cộng **50 unit test**.",
+    "**TDD:** mỗi chức năng có test viết trước, chạy để thấy test FAIL, rồi mới viết code cho tới khi PASS. Tổng cộng **52 unit test**.",
     "**Debug có hệ thống:** mỗi lỗi mô phỏng tìm ra đều đi theo trình tự thu thập bằng chứng → giả thuyết → kiểm chứng → test tái hiện → sửa (bảng mục 6.3).",
     "**Commit nhỏ** theo từng bước trong git (nhánh `feat/firmware`).",
 ])
@@ -182,8 +182,8 @@ d.table(["Nhóm", "Số test", "Ví dụ kiểm tra"], [
     ["Nút giao + bộ xác nhận", "7", "cần 3 mẫu liên tiếp; bỏ qua nhiễu 1 mẫu; phân loại trái/phải/thẳng"],
     ["Bản đồ + lộ trình", "8", "lộ trình mặc định phủ 12 cung và dừng ở A; BFS; lộ trình tham lam"],
     ["Màu", "6", "ngưỡng với đỏ/vàng/tím/xanh/nền; CALIB loại được màu cam"],
-    ["Khử lặp + Backup", "8", "cùng vật đi ngược chiều; 2 vật cách 20 cm; mã hóa/giải mã thanh ghi"],
-    ["Robot (máy trạng thái)", "12", "cảnh báo ≥ 2 s; không báo lặp; lỗi I2C không treo; restart; CALIB; quét trượt; gắp"],
+    ["Khử lặp + Backup", "9", "cùng vật đi ngược chiều; 2 vật cách 20 cm; mã hóa/giải mã thanh ghi; lưu giờ thi"],
+    ["Robot (máy trạng thái)", "13", "cảnh báo ≥ 2 s; không báo lặp; lỗi I2C không treo; restart giữ vật và giờ thi; CALIB; quét trượt; gắp"],
     ["Cơ cấu gắp", "2", "trình tự và thời gian servo"],
 ], [4.5, 2, 10.1], fs=8.5)
 d.h2("6.2. Mô phỏng toàn sân")

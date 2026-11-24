@@ -31,7 +31,7 @@ xe_gap_rac/
 │  │   └─ params.h           TẤT CẢ THAM SỐ TINH CHỈNH nằm ở đây
 │  ├─ src/main.cpp           chương trình chính, chế độ TEST
 │  ├─ src/arduino_hal.cpp    đọc/ghi phần cứng thật
-│  └─ test/host/             50 unit test chạy trên máy tính
+│  └─ test/host/             52 unit test chạy trên máy tính
 ├─ sim/                      trình mô phỏng cả sân thi đấu
 ├─ tools/                    script: chạy test, mô phỏng, vẽ hình, dựng tài liệu
 ├─ docs/                     thiết kế, kế hoạch, kết quả mô phỏng
@@ -134,7 +134,7 @@ d.steps([
     "Đặt xe trên nhánh XUẤT PHÁT, mũi hướng vào sân, mắt giữa M nằm trên vạch.",
     "Khi trọng tài ra hiệu: nhấn RESET (không che E18). Sau 1 giây xe chạy.",
     "Xe tự đi theo lộ trình, báo vật đỏ (còi + LED 2,2 giây, xe đứng yên), rồi dừng ở góc ĐÍCH (LED sáng liền).",
-    "**Restart:** khi trọng tài cho phép, đặt xe lại ở XUẤT PHÁT và nhấn RESET (KHÔNG tắt nguồn). Xe sẽ chỉ đi các cung còn thiếu rồi về đích.",
+    "**Restart:** khi trọng tài cho phép, đặt xe lại ở XUẤT PHÁT và nhấn RESET (KHÔNG tắt nguồn). Xe sẽ chỉ đi các cung còn thiếu rồi về đích; đồng hồ 4:00/5:00 của xe tính tiếp từ thời gian đã thi (không tính khoảng xe được nhấc lên).",
 ])
 d.p("Bảo hiểm thời gian: nếu đã chạy quá **4 phút**, xe bỏ phần còn lại và đi đường ngắn nhất về ĐÍCH. Đến **5 phút** xe dừng hẳn.")
 d.note("**Cần hỏi Ban tổ chức:** “về đích” là dừng ở nút góc A hay phải đi hẳn vào ô ĐÍCH? Firmware hiện **dừng ngay tại nút A** (hành động Stop cuối lộ trình trong `Robot::onNode`). Nếu BTC yêu cầu đi vào ô ĐÍCH, cần bổ sung một đoạn bò thẳng sau Stop – chưa được cài đặt.")
@@ -171,7 +171,7 @@ d.table(["Hiện tượng", "Nguyên nhân thường gặp", "Cách xử lý"], 
 d.h1("11. Kiểm thử trên máy tính (không cần xe)")
 d.p("Mọi thuật toán có thể chạy thử trên Windows trước khi nạp vào xe. Mở **Git Bash** trong thư mục `xe_gap_rac` và chạy:")
 d.code("""
-bash tools/run_host_tests.sh                       # 50 unit test -> "50 tests, 0 failed checks"
+bash tools/run_host_tests.sh                       # 52 unit test -> "50 tests, 0 failed checks"
 bash tools/run_sim.sh --seeds 50                   # mô phỏng 50 lượt thi ngẫu nhiên
 bash tools/run_sim.sh --seeds 1 --verbose          # xem log từng sự kiện như trên xe thật
 bash tools/run_sim.sh --seeds 30 --orange --calib  # thử vật nhiễu màu cam, có CALIB

@@ -47,9 +47,10 @@ void Robot::begin(BootMode mode) {
   }
 
   uint16_t regs[kBackupRegs];
-  uint16_t covered = 0; uint8_t restarts = 0;
+  uint16_t covered = 0, elapsedS = 0; uint8_t restarts = 0;
   bool restored = mode == BootMode::Run && hal_.loadBackup(regs, kBackupRegs) &&
-                  decodeBackup(regs, covered, tracker_, restarts);
+                  decodeBackup(regs, covered, tracker_, restarts, &elapsedS);
+  priorElapsedMs_ = restored ? elapsedS * 1000u : 0;
   if (restored) {
     stats_.restarts = (uint8_t)(restarts + 1);
     stats_.covered = covered;
@@ -85,6 +86,7 @@ void Robot::tick() {
   bool running = state_ != State::Boot && state_ != State::Calib && state_ != State::Ready && state_ != State::Goal;
   if (running) {
     uint32_t el = now - matchStart_;
+    if (now - lastPersist_ >= 5000) { lastPersist_ = now; persist(); }
     if (el >= p_.matchMs) { hal_.log("HET GIO"); finish(now); return; }
     if (el >= p_.goHomeMs && nav_ == NavMode::Map && !stats_.wentHome && state_ == State::Follow) {
       uint8_t n = planPath(node_, heading_, kA, plan_, sizeof(plan_) / sizeof(plan_[0]));
@@ -112,7 +114,7 @@ void Robot::doReady(uint32_t now) {
   hal_.led(((now - stateAt_) / 250) % 2 == 0);
   if (now - stateAt_ >= p_.startDelayMs) {
     hal_.led(false);
-    matchStart_ = now;
+    matchStart_ = now - priorElapsedMs_;  // đồng hồ trọng tài không dừng khi restart
     lastNodeAt_ = now;
     lastCtrl_ = now;
     pid_.reset();
@@ -489,7 +491,9 @@ void Robot::doGoal(uint32_t now) {
 
 void Robot::persist() {
   uint16_t regs[kBackupRegs];
-  encodeBackup(regs, stats_.covered, tracker_, stats_.restarts);
+  bool running = state_ != State::Boot && state_ != State::Ready && state_ != State::Calib;
+  uint32_t el = running ? hal_.millis() - matchStart_ : priorElapsedMs_;
+  encodeBackup(regs, stats_.covered, tracker_, stats_.restarts, (uint16_t)(el / 1000));
   hal_.saveBackup(regs, kBackupRegs);
 }
 

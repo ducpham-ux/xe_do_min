@@ -229,3 +229,17 @@ TEST(robot_gripper_grabs_red_on_its_side_and_counts) {
   CHECK(r.state() == State::Follow);
   CHECK_EQ(r.stats().grabbed, 1);
 }
+
+TEST(robot_match_clock_continues_after_restart) {
+  // Trọng tài tính giờ liên tục qua restart: firmware phải nhớ thời gian đã chạy
+  Params p; FakeHal h;
+  {
+    Robot r(h, p);
+    r.begin(BootMode::Run);
+    run(r, h, 1000 + 200000);          // đã chạy 200 s rồi bị restart
+  }
+  Robot r2(h, p);
+  r2.begin(BootMode::Run);
+  run(r2, h, 1000 + 45000);            // thêm 45 s -> tổng > 240 s
+  CHECK(r2.stats().wentHome);
+}

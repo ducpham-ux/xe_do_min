@@ -78,3 +78,13 @@ TEST(tracker_side_is_relative_to_edge_not_robot) {
   t.mark(2, edgeSide(Side::Right, true), 66);
   CHECK(!t.isNew(2, edgeSide(Side::Left, false), 66));
 }
+
+TEST(backup_keeps_elapsed_match_seconds) {
+  Params p; ObjectTracker t(p), u(p);
+  for (int i = 0; i < 9; ++i) t.mark((uint8_t)i, Side::Left, 10.0f * i);  // đầy 9 vật
+  uint16_t regs[kBackupRegs];
+  encodeBackup(regs, 0x0FFF, t, 3, 287);
+  uint16_t cov; uint8_t r; uint16_t el = 0;
+  CHECK(decodeBackup(regs, cov, u, r, &el));
+  CHECK_EQ(el, 287); CHECK_EQ(u.count(), 9); CHECK_EQ(r, 3);
+}

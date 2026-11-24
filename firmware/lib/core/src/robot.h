@@ -86,6 +86,7 @@ class Robot {
   bool ticked_ = false;
   int16_t cmdL_ = 0, cmdR_ = 0;   // lệnh danh định (trước khi bù tốc độ)
   float odo_ = 0, learnDist_ = 0;
+  uint32_t priorElapsedMs_ = 0, lastPersist_ = 0;  // thời gian thi trước restart
   uint8_t calibStep_ = 0;
   bool lost_ = false;
   float lastPos_ = 0;
