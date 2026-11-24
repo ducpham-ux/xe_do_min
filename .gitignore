@@ -5,3 +5,5 @@ build/
 *.pdb
 .vscode/
 __pycache__/
+.superpowers/
+build/
