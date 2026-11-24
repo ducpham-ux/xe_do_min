@@ -3,6 +3,7 @@
 // điểm xuất phát, cần tinh chỉnh trên sân (xem Hướng dẫn, mục Tinh chỉnh).
 #pragma once
 #include <stdint.h>
+#include "hal.h"
 
 namespace core {
 
@@ -90,6 +91,7 @@ struct Params {
 
   // ---------- Vòng 2: gắp ----------
   bool enableGripper = false;
+  Side gripSide = Side::Right;    // cơ cấu gắp lắp bên nào (chỉ gắp vật ở bên đó)
   uint8_t gripOpenDeg = 90, gripCloseDeg = 20;   // servo kẹp (PA7)
   uint8_t armUpDeg = 150, armDownDeg = 40;       // servo nâng (PA6)
   uint16_t gripStepMs = 450;

@@ -215,3 +215,17 @@ TEST(robot_crawl_by_distance_into_node_center) {
   run(r, h, 600);
   CHECK(r.state() != State::NodeScan);
 }
+
+TEST(robot_gripper_grabs_red_on_its_side_and_counts) {
+  Params p; p.enableGripper = true; p.gripSide = Side::Left;
+  FakeHal h; Robot r(h, p);
+  r.begin(BootMode::Run);
+  run(r, h, 1500);
+  h.color[0] = red3200(); h.obs[0] = true;
+  run(r, h, 2500);            // quét + cảnh báo 2,2 s
+  h.obs[0] = false;
+  CHECK(r.state() == State::Grip);
+  run(r, h, 4 * p.gripStepMs + 50);
+  CHECK(r.state() == State::Follow);
+  CHECK_EQ(r.stats().grabbed, 1);
+}

@@ -6,6 +6,7 @@
 #include "backup_codec.h"
 #include "color.h"
 #include "field_map.h"
+#include "gripper.h"
 #include "hal.h"
 #include "line_pos.h"
 #include "node_detector.h"
@@ -58,6 +59,7 @@ class Robot {
   void doGrip(uint32_t now);
   void doRecover(uint32_t now, uint8_t bits);
   void doCalib(uint32_t now);
+  void doGoal(uint32_t now);
   void onNode(uint32_t now, const NodeShape& shape);
   Act fallbackChoice(const NodeShape& shape);
   void startTurn(uint32_t now, Act a, bool uturnAtDeadEnd);
@@ -76,6 +78,7 @@ class Robot {
   Pid pid_;
   ObjectTracker tracker_;
   Alert alert_;
+  Gripper gripper_;
   Stats stats_;
 
   State state_ = State::Boot;
@@ -121,7 +124,6 @@ class Robot {
   uint8_t scanLowRun_ = 0;
 
   // gắp / calib
-  uint8_t gripStep_ = 0;
   uint8_t calibCount_ = 0;
   bool calibWaitClear_ = false;
 };

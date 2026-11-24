@@ -1,0 +1,27 @@
+seed  do(trung/tong)  nham  lap  ma  phu  ve_dich  t(s)  lech  du_phong
+   1    7/ 8           0     0    0   12   co       91.5   0   -
+   2    6/ 8           0     0    0   12   co       83.8   0   -
+   3    8/ 8           0     0    0   12   co       92.5   0   -
+   4    8/ 8           0     0    0   12   co       97.4   0   -
+   5    5/ 8           0     0    0   12   co       82.5   0   -
+   6    4/ 8           0     0    0   12   co       82.2   0   -
+   7    8/ 8           0     0    0   12   co       94.4   0   -
+   8    7/ 8           0     0    0   12   co       86.4   0   -
+   9    7/ 8           0     0    0   12   co       84.8   0   -
+  10    7/ 8           0     0    0   12   co       88.7   0   -
+  11    7/ 8           0     0    0   12   co       86.4   0   -
+  12    6/ 8           0     0    0   12   co       86.4   0   -
+  13    7/ 8           0     0    0   12   co       88.0   0   -
+  14    8/ 8           0     0    0   12   co       92.0   0   -
+  15    6/ 8           0     0    0   12   co       89.6   0   -
+  16    7/ 8           0     0    0   12   co       90.8   0   -
+  17    7/ 8           0     0    0   12   co       86.3   0   -
+  18    7/ 8           0     0    0   12   co       87.3   0   -
+  19    6/ 8           0     0    0   12   co       86.0   0   -
+  20    8/ 8           0     0    0   12   co       87.9   0   -
+
+FIRMWARE: bat dung 98.6% vat do NAM TRONG TAM cam bien (136/138); HE THONG: 85.0% tong vat do
+
+TONG KET 20 luot: bat do 85.0% (136/160), bao nham 0, bao lap 0, bao ma 0, ve dich 20/20, phu du 12 cung 20/20, du phong 0, t trung vi 87.9s
+GAP (Vong 2): 64 vat da gap len xe
+KET QUA: DAT

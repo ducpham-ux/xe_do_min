@@ -15,7 +15,7 @@ inline float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi 
 }  // namespace
 
 Robot::Robot(Hal& hal, const Params& p)
-    : hal_(hal), p_(p), nd_(p), pid_(p.kp, p.ki, p.kd, p.iLimit), tracker_(p) {
+    : hal_(hal), p_(p), nd_(p), pid_(p.kp, p.ki, p.kd, p.iLimit), tracker_(p), gripper_(p) {
   vEst_ = p.vBaseCmS;
 }
 
@@ -32,6 +32,7 @@ void Robot::begin(BootMode mode) {
   hal_.setMotors(0, 0);
   hal_.buzzer(false);
   hal_.led(false);
+  if (p_.enableGripper) gripper_.park(hal_);
 
   if (mode == BootMode::Calib) {
     cal_ = Calib();
@@ -102,7 +103,7 @@ void Robot::tick() {
     case State::AlertOn: doAlert(now); break;
     case State::Grip: doGrip(now); break;
     case State::Recover: doRecover(now, bits); break;
-    case State::Goal: hal_.setMotors(0, 0); break;
+    case State::Goal: doGoal(now); break;
   }
 }
 
@@ -450,11 +451,17 @@ void Robot::doAlert(uint32_t now) {
   hal_.buzzer(false);
   hal_.led(false);
   lastCtrl_ = now;
-  if (p_.enableGripper) { gripStep_ = 0; enter(State::Grip); }
+  if (p_.enableGripper && scanSide_ == p_.gripSide) { gripper_.start(now, hal_); enter(State::Grip); }
   else enter(State::Follow);
 }
 
 void Robot::doGrip(uint32_t now) {
+  drive(0, 0);
+  if (gripper_.update(now, hal_)) return;
+  stats_.grabbed++;
+  char buf[40];
+  snprintf(buf, sizeof buf, "GAP xong: %u vat tren xe", stats_.grabbed);
+  hal_.log(buf);
   lastCtrl_ = now;
   enter(State::Follow);
 }
@@ -469,6 +476,15 @@ void Robot::finish(uint32_t now) {
   char buf[64];
   snprintf(buf, sizeof buf, "KET THUC: %lu ms, bao %u vat", (unsigned long)stats_.finishMs, stats_.alerts);
   hal_.log(buf);
+}
+
+// Vòng 2: báo số rác đang chở bằng số tiếng bíp (mỗi tiếng 300 ms), lặp lại mỗi 5 giây.
+void Robot::doGoal(uint32_t now) {
+  hal_.setMotors(0, 0);
+  if (!p_.enableGripper || stats_.grabbed == 0) return;
+  uint32_t t = (now - stateAt_) % 5000;
+  uint32_t k = t / 600;
+  hal_.buzzer(k < stats_.grabbed && (t % 600) < 300);
 }
 
 void Robot::persist() {

@@ -210,7 +210,7 @@ int main(int argc, char** argv) {
     else if (a == "--color-range") colorRange = std::atof(argv[++i]);
     else if (a == "--noise") noise = std::atof(argv[++i]);
   }
-  int rdb = 0, rdbHit = 0;
+  int rdb = 0, rdbHit = 0, grabbed = 0;
   int reds = 0, hits = 0, fa = 0, dup = 0, ph = 0, fin = 0, cov12 = 0, fb = 0;
   std::vector<double> times;
   std::printf("seed  do(trung/tong)  nham  lap  ma  phu  ve_dich  t(s)  lech  du_phong\n");
@@ -220,6 +220,7 @@ int main(int argc, char** argv) {
     Metrics m = runOne(o, calib, restartAt, gripper, verbose, (svg && s == start) ? svg : nullptr);
     std::printf("%4d   %2d/%2d          %2d    %2d   %2d   %2d   %s     %5.1f  %2d   %s\n", s, m.redsHit, m.redsTotal, m.falseAlarms,
                 m.duplicates, m.phantom, m.covered, m.finished ? "co " : "KHONG", m.timeS, m.mismatches, m.fallback ? "co" : "-");
+    grabbed += m.grabbed;
     rdb += m.redsReadable; rdbHit += m.readableHit;
     reds += m.redsTotal; hits += m.redsHit; fa += m.falseAlarms; dup += m.duplicates; ph += m.phantom;
     fin += m.finished; cov12 += m.covered == 12; fb += m.fallback;
@@ -232,6 +233,7 @@ int main(int argc, char** argv) {
   std::printf("\nFIRMWARE: bat dung %.1f%% vat do NAM TRONG TAM cam bien (%d/%d); HE THONG: %.1f%% tong vat do\n", fwRate, rdbHit, rdb, hitRate);
   std::printf("\nTONG KET %d luot: bat do %.1f%% (%d/%d), bao nham %d, bao lap %d, bao ma %d, ve dich %d/%d, phu du 12 cung %d/%d, du phong %d, t trung vi %.1fs\n",
               seeds, hitRate, hits, reds, fa, dup, ph, fin, seeds, cov12, seeds, fb, med);
+  if (gripper) std::printf("GAP (Vong 2): %d vat da gap len xe\n", grabbed);
   bool pass = fwRate >= 95 && fa == 0 && dup == 0 && ph == 0 && fin * 100 >= 98 * seeds && cov12 * 100 >= 98 * seeds && med < 180;
   std::printf("KET QUA: %s\n", pass ? "DAT" : "CHUA DAT");
   return pass ? 0 : 1;
