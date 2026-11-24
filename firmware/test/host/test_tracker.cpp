@@ -13,11 +13,12 @@ TEST(tracker_same_place_is_duplicate) {
   CHECK_EQ(t.count(), 1);
 }
 
-TEST(tracker_two_reds_15cm_apart_are_distinct) {
-  Params p; ObjectTracker t(p);
+TEST(tracker_two_reds_20cm_apart_are_distinct) {
+  Params p; ObjectTracker t(p);   // dupTolCm = 16
   t.mark(3, Side::Left, 40);
-  CHECK(t.isNew(3, Side::Left, 55));
-  CHECK(t.isNew(3, Side::Left, 25));
+  CHECK(t.isNew(3, Side::Left, 60));
+  CHECK(t.isNew(3, Side::Left, 20));
+  CHECK(!t.isNew(3, Side::Left, 54));
 }
 
 TEST(tracker_other_side_or_edge_is_new) {

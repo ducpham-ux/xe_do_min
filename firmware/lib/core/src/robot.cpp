@@ -270,7 +270,7 @@ void Robot::onNode(uint32_t now, const NodeShape& shape) {
     int8_t e = currentEdge();
     if (e >= 0 && e < kNumEdges) stats_.covered |= (uint16_t)(1u << e);
     Act a = planIdx_ < planLen_ ? plan_[planIdx_++] : Act::Stop;
-    snprintf(buf, sizeof buf, "NUT %c huong %d -> act %d (v=%.1f k=%.2f)", nodeName(node_), (int)heading_, (int)a, (double)vEst_, (double)pwmScale_);
+    snprintf(buf, sizeof buf, "NUT %c huong %d -> act %d (d=%.0f v=%.1f k=%.2f)", nodeName(node_), (int)heading_, (int)a, (double)learnDist_, (double)vEst_, (double)pwmScale_);
     hal_.log(buf);
     if (a == Act::Stop) { persist(); finish(now); return; }
     startTurn(now, a, false);

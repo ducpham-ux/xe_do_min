@@ -50,7 +50,7 @@ struct Params {
   // ---------- Ước lượng vận tốc (không có encoder) ----------
   float vBaseCmS = 40.0f;         // vận tốc ước lượng ở baseSpeed (đo bằng chế độ TEST)
   float pwmDeadband = 30.0f;      // PWM dưới mức này bánh không quay (đo bằng chế độ TEST)
-  float vLearnAlpha = 0.3f;       // tốc độ học từ thời gian chạy hết cung
+  float vLearnAlpha = 0.6f;       // tốc độ học từ thời gian chạy hết cung
   bool adaptSpeed = true;         // tự chỉnh PWM để giữ vận tốc mục tiêu khi pin thay đổi
   float adaptMin = 0.85f, adaptMax = 1.20f;
 
@@ -72,7 +72,7 @@ struct Params {
 
   // ---------- Khử lặp ----------
   float binCm = 30.0f;            // đoạn 30 cm
-  float dupTolCm = 12.0f;         // coi là cùng vật nếu lệch < 12 cm
+  float dupTolCm = 16.0f;         // coi là cùng vật nếu lệch < 16 cm (2 vật đỏ cùng bên phải cách >= 16 cm)
 
   // ---------- Cảnh báo ----------
   uint16_t alertMs = 2200;        // thể lệ: >= 2 giây
