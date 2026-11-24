@@ -43,7 +43,7 @@ bool decodeBackup(const uint16_t regs[kBackupRegs], uint16_t& covered, ObjectTra
     uint8_t edge = (uint8_t)getBits(regs + 2, pos, 4);
     Side side = getBits(regs + 2, pos, 1) ? Side::Right : Side::Left;
     uint8_t s = (uint8_t)getBits(regs + 2, pos, 8);
-    if (edge >= 12) return false;
+    if (edge > kStartStubEdge) return false;
     t.mark(edge, side, s);
   }
   return true;

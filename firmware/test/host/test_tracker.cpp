@@ -57,3 +57,13 @@ TEST(backup_rejects_garbage) {
   uint16_t zeros[kBackupRegs] = {};
   CHECK(!decodeBackup(zeros, cov, u, r));
 }
+
+TEST(backup_keeps_start_stub_objects) {
+  Params p; ObjectTracker t(p), u(p);
+  t.mark(kStartStubEdge, Side::Left, 20);
+  uint16_t regs[kBackupRegs];
+  encodeBackup(regs, 0, t, 0);
+  uint16_t cov; uint8_t r;
+  CHECK(decodeBackup(regs, cov, u, r));
+  CHECK(!u.isNew(kStartStubEdge, Side::Left, 22));
+}

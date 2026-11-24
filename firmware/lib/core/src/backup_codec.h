@@ -9,6 +9,7 @@
 
 namespace core {
 constexpr uint8_t kBackupRegs = 10;
+constexpr uint8_t kStartStubEdge = 12;  // nhánh XUẤT PHÁT -> H được coi là "cung" số 12
 constexpr uint8_t kBackupMaxObjects = 9;
 bool encodeBackup(uint16_t regs[kBackupRegs], uint16_t covered, const ObjectTracker& t, uint8_t restarts);
 bool decodeBackup(const uint16_t regs[kBackupRegs], uint16_t& covered, ObjectTracker& t, uint8_t& restarts);

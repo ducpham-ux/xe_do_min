@@ -16,8 +16,13 @@ struct Params {
   // ---------- Bám line PID ----------
   float kp = 26.0f;               // PWM / cm
   float ki = 0.0f;                // PWM / (cm*s)
-  float kd = 1.6f;                // PWM / (cm/s)
+  float kd = 0.08f;               // PWM / (cm/s)
   float iLimit = 40.0f;           // kẹp thành phần tích phân (PWM)
+  uint8_t ctrlMs = 4;             // chu kỳ điều khiển PID (ms)
+  float flareZoneCm = 35.0f;      // sau khi rời nút, chỉ dùng 3 mắt giữa trong 35 cm (tránh loa bo)
+  float sensorAheadCm = 8.5f;     // mắt ngoài nằm trước trục bánh bao nhiêu cm
+  float fallbackGateCm = 18.0f;   // chế độ dự phòng: khoảng cách tối thiểu giữa 2 nút
+  uint8_t calibSamples = 12;      // số mẫu mỗi lần học màu
   int16_t baseSpeed = 140;        // tốc độ nền trên đoạn thẳng
   int16_t approachSpeed = 110;    // tốc độ khi gần nút dự kiến
   float approachFrac = 0.80f;     // giảm tốc khi đã đi 80% cung
