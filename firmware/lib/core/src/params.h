@@ -72,7 +72,6 @@ struct Params {
   float calibRadius = 0.07f, calibMargin = 0.02f;
 
   // ---------- Khử lặp ----------
-  float binCm = 30.0f;            // đoạn 30 cm
   float dupTolCm = 16.0f;         // coi là cùng vật nếu lệch < 16 cm (2 vật đỏ cùng bên phải cách >= 16 cm)
 
   // ---------- Cảnh báo ----------
@@ -86,8 +85,6 @@ struct Params {
   uint32_t fallbackMinExploreMs = 45000;  // (đã đo thật) chế độ dự phòng: trắng sau 45 s = ĐÍCH
   uint16_t lostConfirmMs = 60;    // (đã đo thật) xác nhận toàn trắng
   uint16_t recoverTimeoutMs = 3000;
-  bool goalStopAtNode = true;     // ĐÍCH = dừng ở nút góc A (hỏi BTC)
-  float goalCreepCm = 0.0f;       // nếu phải đi vào ô ĐÍCH: tiến thêm bao nhiêu cm
 
   // ---------- Vòng 2: gắp ----------
   bool enableGripper = false;

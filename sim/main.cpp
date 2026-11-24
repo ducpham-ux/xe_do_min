@@ -16,6 +16,7 @@ using namespace core;
 
 namespace {
 int g_traceFrom = -1, g_traceTo = -1;
+const char* g_trail = nullptr;
 
 struct Metrics {
   int redsReadable = 0, readableHit = 0;
@@ -96,6 +97,15 @@ int coverage(const sim::World& w) {
     if (c >= 13) ++n;
   }
   return n;
+}
+
+void writeTrail(const char* path, const sim::World& w, const SimHal& h) {
+  FILE* f = std::fopen(path, "w");
+  if (!f) return;
+  for (size_t i = 0; i < w.trail.size(); i += 2) std::fprintf(f, "T,%.1f,%.1f\n", w.trail[i].first, w.trail[i].second);
+  for (auto& o : w.objects) std::fprintf(f, "O,%.1f,%.1f,%s,%d\n", o.x, o.y, sim::colorName(o.color), o.reports);
+  for (auto& a : h.alertsAt) std::fprintf(f, "A,%.1f,%.1f\n", a.first, a.second);
+  std::fclose(f);
 }
 
 void writeSvg(const char* path, const sim::World& w, const SimHal& h) {
@@ -184,6 +194,7 @@ Metrics runOne(const sim::Options& o, bool calib, int restartAt, bool gripper, b
     }
   }
   if (svg) writeSvg(svg, w, h);
+  if (g_trail) writeTrail(g_trail, w, h);
   return m;
 }
 
@@ -206,6 +217,7 @@ int main(int argc, char** argv) {
     else if (a == "--gripper") gripper = true;
     else if (a == "--verbose") verbose = true;
     else if (a == "--trace") { g_traceFrom = std::atoi(argv[++i]); g_traceTo = std::atoi(argv[++i]); }
+    else if (a == "--trail") g_trail = argv[++i];
     else if (a == "--side-y") sideY = std::atof(argv[++i]);
     else if (a == "--color-range") colorRange = std::atof(argv[++i]);
     else if (a == "--noise") noise = std::atof(argv[++i]);
