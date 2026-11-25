@@ -1,7 +1,5 @@
 // pins.h - sơ đồ chân và các công tắc biên dịch.
 // Theo tài liệu "chi_ti_t_ph_n_c_ng_s_ch_n_stm32.md" (đã chạy thật trên xe).
-// LƯU Ý: bản vẽ schematic v3.0 ghi I2C1_SCL ở PB8 - nếu bạn thực sự đi dây SCL=PB8, SDA=PB9
-// thì đặt I2C_REMAP_PB8_PB9 = 1 (PB8 + PB7 KHÔNG phải cặp I2C phần cứng hợp lệ).
 #pragma once
 #include <Arduino.h>
 
@@ -29,22 +27,13 @@
 #define PIN_OBS_R PA10
 #define OBS_ACTIVE_HIGH 1      // tài liệu: HIGH khi có vật
 
-// ---------------- TCS3200 (trái) ----------------
+// ---------------- TCS3200 (sườn trái, đọc tốt ở ~1,5 cm) ----------------
 #define PIN_TCS_S2  PB0
 #define PIN_TCS_S3  PB1
 #define PIN_TCS_OUT PB10       // chân chịu 5 V
 #define TCS3200_TIMEOUT_US 3000
 
-// ---------------- TCS34725 (phải) ----------------
-#define I2C_REMAP_PB8_PB9 0
-#if I2C_REMAP_PB8_PB9
-#define PIN_SDA PB9
-#define PIN_SCL PB8
-#else
-#define PIN_SDA PB7
-#define PIN_SCL PB6
-#endif
-#define TCS34725_ADDR 0x29
+// TCS34725 (phải) đã bỏ sau test lần 1. PB6/PB7 để trống.
 
 // ---------------- Báo hiệu ----------------
 #define PIN_BUZZER PA1         // qua NPN S8050: HIGH = kêu

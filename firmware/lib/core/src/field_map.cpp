@@ -128,26 +128,35 @@ uint8_t planPath(uint8_t node, Dir heading, uint8_t target, Act* out, uint8_t ma
   return (uint8_t)(len + 1);
 }
 
-uint8_t planCoverage(uint8_t node, Dir heading, uint16_t covered, uint8_t target, Act* out, uint8_t max) {
+uint8_t dirIndex(uint8_t from, uint8_t to) {
+  int8_t e = edgeOf(from, to);
+  if (e < 0) return 255;
+  return (uint8_t)(e * 2 + (from < to ? 0 : 1));
+}
+
+uint8_t planGreedy(uint8_t node, Dir heading, uint16_t needEdges, uint32_t needDir, uint8_t target, Act* out, uint8_t max) {
   uint8_t n = 0;
   State cur{node, heading};
-  while ((covered & kAllEdges) != kAllEdges) {
-    uint16_t cov = covered;
+  needEdges &= kAllEdges;
+  while (needEdges || needDir) {
+    uint16_t ne = needEdges; uint32_t nd = needDir;
     State end{};
     int len = bfs(cur.node, cur.h,
-                  [cov](uint8_t from, uint8_t to) {
+                  [ne, nd](uint8_t from, uint8_t to) {
                     int8_t e = edgeOf(from, to);
-                    return e >= 0 && !(cov & (1u << e));
+                    if (e < 0) return false;
+                    return (ne & (1u << e)) != 0 || (nd & (1ul << dirIndex(from, to))) != 0;
                   },
                   out + n, (uint8_t)(max - n), &end);
     if (len < 0) return 0;
-    // đánh dấu mọi cung trên đoạn vừa lập
-    uint8_t nd = cur.node; Dir hd = cur.h;
+    // đánh dấu mọi nhu cầu được thỏa trên đoạn vừa lập
+    uint8_t nod = cur.node; Dir hd = cur.h;
     for (int i = 0; i < len; ++i) {
       hd = applyAct(hd, out[n + i]);
-      int8_t nb = neighbor(nd, hd);
-      covered |= (uint16_t)(1u << edgeOf(nd, (uint8_t)nb));
-      nd = (uint8_t)nb;
+      int8_t nb = neighbor(nod, hd);
+      needEdges &= (uint16_t)~(1u << edgeOf(nod, (uint8_t)nb));
+      needDir &= ~(1ul << dirIndex(nod, (uint8_t)nb));
+      nod = (uint8_t)nb;
     }
     n = (uint8_t)(n + len);
     cur = end;
@@ -156,6 +165,81 @@ uint8_t planCoverage(uint8_t node, Dir heading, uint16_t covered, uint8_t target
   uint8_t tail = planPath(cur.node, cur.h, target, out + n, (uint8_t)(max - n));
   if (tail == 0) return 0;
   return (uint8_t)(n + tail);
+}
+
+uint8_t planCoverage(uint8_t node, Dir heading, uint16_t covered, uint8_t target, Act* out, uint8_t max) {
+  return planGreedy(node, heading, (uint16_t)(~covered & kAllEdges), 0, target, out, max);
+}
+
+bool planTraverses(uint8_t node, Dir heading, const Act* acts, uint8_t n, uint8_t from, uint8_t to) {
+  for (uint8_t i = 0; i < n; ++i) {
+    if (acts[i] == Act::Stop) return false;
+    heading = applyAct(heading, acts[i]);
+    int8_t nb = neighbor(node, heading);
+    if (nb < 0 || nb >= kNumNodes) return false;
+    if (node == from && nb == to) return true;
+    node = (uint8_t)nb;
+  }
+  return false;
+}
+
+// ------------------------------------------------------------------- định vị đa giả thuyết
+void Localizer::resetAll(const NodeShape& s) {
+  bits_ = 0;
+  for (uint8_t n = 0; n < kNumNodes; ++n)
+    for (uint8_t h = 0; h < 4; ++h) {
+      NodeShape e = expectedShape(n, (Dir)h);
+      // chỉ những trạng thái có đường đi tới (đến nút n theo hướng h phải có nút phía sau)
+      if (neighbor(n, applyAct((Dir)h, Act::UTurn)) < 0) continue;
+      if (e.left == s.left && e.right == s.right) bits_ |= stateBit(n, (Dir)h);
+    }
+}
+
+uint8_t Localizer::observe(const NodeShape& s) {
+  uint64_t keep = 0;
+  for (uint8_t i = 0; i < kNumNodes * 4; ++i) {
+    if (!((bits_ >> i) & 1u)) continue;
+    NodeShape e = expectedShape(i / 4, (Dir)(i % 4));
+    if (e.left == s.left && e.right == s.right) keep |= 1ull << i;
+  }
+  if (!keep) return 0;
+  bits_ = keep;
+  return count();
+}
+
+void Localizer::act(Act a) {
+  uint64_t next = 0;
+  for (uint8_t i = 0; i < kNumNodes * 4; ++i) {
+    if (!((bits_ >> i) & 1u)) continue;
+    uint8_t n = i / 4;
+    Dir h = applyAct((Dir)(i % 4), a);
+    int8_t nb = neighbor(n, h);
+    if (nb >= 0 && nb < kNumNodes) next |= stateBit((uint8_t)nb, h);
+    else if (nb == kStart || nb == kStub) next |= stateBit(n, applyAct(h, Act::UTurn));  // vào nhánh cụt rồi quay về
+  }
+  bits_ = next;
+}
+
+void Localizer::deadEnd() { bits_ = stateBit(kB, Dir::S) | stateBit(kH, Dir::N); }
+
+uint8_t Localizer::count() const {
+  uint8_t c = 0;
+  for (uint64_t b = bits_; b; b &= b - 1) ++c;
+  return c;
+}
+
+bool Localizer::nearest(uint8_t node, Dir h, uint8_t& outNode, Dir& outH) const {
+  int best = 1000;
+  for (uint8_t i = 0; i < kNumNodes * 4; ++i) {
+    if (!((bits_ >> i) & 1u)) continue;
+    uint8_t n = i / 4;
+    int dc = (int)col(n) - (int)col(node < kNumNodes ? node : kH);
+    int dr = (int)row(n) - (int)row(node < kNumNodes ? node : kH);
+    int d = (dc < 0 ? -dc : dc) + (dr < 0 ? -dr : dr);
+    d = d * 4 + ((Dir)(i % 4) == h ? 0 : 1);
+    if (d < best) { best = d; outNode = n; outH = (Dir)(i % 4); }
+  }
+  return best < 1000;
 }
 
 }  // namespace core

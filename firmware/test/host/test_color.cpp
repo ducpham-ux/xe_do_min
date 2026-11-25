@@ -3,57 +3,54 @@
 
 using namespace core;
 
-static RawColor rc(uint16_t r, uint16_t g, uint16_t b, uint16_t c = 0) { RawColor x; x.r = r; x.g = g; x.b = b; x.c = c; return x; }
+static RawColor rc(uint16_t r, uint16_t g, uint16_t b) { RawColor x; x.r = r; x.g = g; x.b = b; return x; }
 
 TEST(color_tcs3200_default_thresholds) {
   Params p; Calib cal;
-  CHECK(isRedSample(Sensor::Tcs3200, rc(250, 600, 550), p, cal));     // đỏ
-  CHECK(!isRedSample(Sensor::Tcs3200, rc(220, 260, 500), p, cal));    // vàng
-  CHECK(!isRedSample(Sensor::Tcs3200, rc(300, 600, 350), p, cal));    // tím
-  CHECK(!isRedSample(Sensor::Tcs3200, rc(500, 300, 450), p, cal));    // xanh lá
-  CHECK(!isRedSample(Sensor::Tcs3200, rc(120, 130, 110), p, cal));    // nền trắng
-  CHECK(!isRedSample(Sensor::Tcs3200, rc(520, 1100, 1000), p, cal));  // đỏ nhưng quá xa (r >= 450)
-  CHECK(!isRedSample(Sensor::Tcs3200, rc(0, 0, 0), p, cal));          // không có xung
+  CHECK(isRedSample(rc(250, 600, 550), p, cal));     // đỏ
+  CHECK(!isRedSample(rc(220, 260, 500), p, cal));    // vàng
+  CHECK(!isRedSample(rc(300, 600, 350), p, cal));    // tím
+  CHECK(!isRedSample(rc(500, 300, 450), p, cal));    // xanh lá
+  CHECK(!isRedSample(rc(120, 130, 110), p, cal));    // trắng
+  CHECK(!isRedSample(rc(520, 1100, 1000), p, cal));  // đỏ nhưng quá xa (r >= 450)
+  CHECK(!isRedSample(rc(0, 0, 0), p, cal));          // không có xung
 }
 
-TEST(color_tcs34725_default_thresholds) {
-  Params p; Calib cal;
-  CHECK(isRedSample(Sensor::Tcs34725, rc(200, 60, 50, 300), p, cal));
-  CHECK(!isRedSample(Sensor::Tcs34725, rc(60, 200, 90, 330), p, cal));  // xanh lá
-  CHECK(!isRedSample(Sensor::Tcs34725, rc(40, 12, 10, 50), p, cal));    // quá tối (c <= 80)
-  CHECK(!isRedSample(Sensor::Tcs34725, rc(150, 140, 60, 340), p, cal)); // vàng: r < 1.10 g
+TEST(color_presence_needs_a_bright_channel) {
+  Params p;  // presenceMaxUs = 600
+  CHECK(colorPresent(rc(250, 600, 550), p));
+  CHECK(colorPresent(rc(500, 300, 450), p));
+  CHECK(!colorPresent(rc(1500, 1600, 1400), p));   // không có vật: nền tối
+  CHECK(!colorPresent(rc(0, 300, 300), p));        // 1 kênh hết thời gian chờ = lỗi đọc
 }
 
 TEST(color_chroma_sums_to_one) {
   float c[3];
-  chroma(Sensor::Tcs34725, rc(200, 60, 40, 300), c);
+  chroma(rc(250, 500, 500), c);  // cường độ ~ 1/chu kỳ: đỏ gấp đôi
   CHECK_NEAR(c[0] + c[1] + c[2], 1.0, 1e-5);
-  CHECK_NEAR(c[0], 200.0 / 300, 1e-5);
-  chroma(Sensor::Tcs3200, rc(250, 500, 500), c);  // cường độ ~ 1/chu kỳ: đỏ gấp đôi
   CHECK_NEAR(c[0], 0.5, 1e-5);
 }
 
 TEST(color_calibrated_rejects_orange_that_defaults_accept) {
   Params p; Calib cal;
-  RawColor red = rc(200, 60, 50, 300), orange = rc(230, 160, 50, 360), green = rc(60, 200, 90, 330);
-  CHECK(isRedSample(Sensor::Tcs34725, orange, p, cal));  // điểm yếu của ngưỡng mặc định
-  calibAdd(cal, Sensor::Tcs34725, kRed, red);
-  calibAdd(cal, Sensor::Tcs34725, kYellow, orange);
-  calibAdd(cal, Sensor::Tcs34725, kGreen, green);
-  CHECK(isRedSample(Sensor::Tcs34725, red, p, cal));
-  CHECK(isRedSample(Sensor::Tcs34725, rc(190, 62, 52, 290), p, cal));  // đỏ hơi khác
-  CHECK(!isRedSample(Sensor::Tcs34725, orange, p, cal));
-  CHECK(!isRedSample(Sensor::Tcs34725, green, p, cal));
+  RawColor red = rc(250, 600, 550), orange = rc(240, 450, 560), green = rc(500, 300, 450);
+  CHECK(isRedSample(orange, p, cal));  // điểm yếu của ngưỡng mặc định
+  calibAdd(cal, kRed, red);
+  calibAdd(cal, kYellow, orange);
+  calibAdd(cal, kGreen, green);
+  CHECK(isRedSample(red, p, cal));
+  CHECK(isRedSample(rc(245, 610, 540), p, cal));  // đỏ hơi khác
+  CHECK(!isRedSample(orange, p, cal));
+  CHECK(!isRedSample(green, p, cal));
 }
 
 TEST(color_calib_running_average) {
   Calib cal;
-  calibAdd(cal, Sensor::Tcs34725, kRed, rc(200, 50, 50, 300));
-  calibAdd(cal, Sensor::Tcs34725, kRed, rc(100, 50, 50, 200));
-  // trung bình chroma đỏ của 2 mẫu: (0.6667 + 0.5)/2
-  CHECK_NEAR(cal.cent[1][kRed][0], (200.0 / 300 + 100.0 / 200) / 2, 1e-4);
-  CHECK(cal.has(Sensor::Tcs34725, kRed));
-  CHECK(!cal.has(Sensor::Tcs3200, kRed));
+  calibAdd(cal, kRed, rc(250, 500, 500));   // r chroma = 0.5
+  calibAdd(cal, kRed, rc(250, 250, 250));   // r chroma = 1/3
+  CHECK_NEAR(cal.cent[kRed][0], (0.5 + 1.0 / 3) / 2, 1e-4);
+  CHECK(cal.has(kRed));
+  CHECK(!cal.has(kGreen));
 }
 
 TEST(color_vote_majority) {

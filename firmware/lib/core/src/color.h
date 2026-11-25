@@ -1,4 +1,5 @@
-// color.h - nhận diện màu đỏ từ 2 cảm biến.
+// color.h - nhận diện màu đỏ bằng TCS3200 (sườn trái). TCS34725 đã bỏ (test lần 1: không
+// phát hiện được màu trong môi trường test).
 // Mặc định dùng ngưỡng đã thử thật trên xe. Sau khi chạy chế độ CALIB (học mẫu thật trên sân),
 // dùng phân loại "tâm màu gần nhất" trong không gian chromaticity (r,g chuẩn hóa) để loại
 // được cả màu cam/vàng gần đỏ.
@@ -9,20 +10,23 @@
 
 namespace core {
 
-enum class Sensor : uint8_t { Tcs3200 = 0, Tcs34725 = 1 };  // trái / phải
 enum ColorClass : uint8_t { kRed = 0, kYellow, kGreen, kPurple, kNumClasses };
 
 struct Calib {
-  static constexpr uint32_t kMagic = 0xCA1B0002u;
+  static constexpr uint32_t kMagic = 0xCA1B0003u;  // đổi định dạng -> bản CALIB cũ bị bỏ qua
   uint32_t magic = kMagic;
-  uint16_t count[2][kNumClasses] = {};      // số mẫu đã học (0 = chưa có)
-  float cent[2][kNumClasses][2] = {};       // tâm chromaticity (r, g)
-  bool has(Sensor s, uint8_t cls) const { return count[(uint8_t)s][cls] > 0; }
+  uint16_t count[kNumClasses] = {};      // số mẫu đã học (0 = chưa có)
+  float cent[kNumClasses][2] = {};       // tâm chromaticity (r, g)
+  bool has(uint8_t cls) const { return count[cls] > 0; }
 };
 
-void chroma(Sensor s, const RawColor& c, float out[3]);
-void calibAdd(Calib& cal, Sensor s, uint8_t cls, const RawColor& c);
-bool isRedSample(Sensor s, const RawColor& c, const Params& p, const Calib& cal);
+void chroma(const RawColor& c, float out[3]);
+void calibAdd(Calib& cal, uint8_t cls, const RawColor& c);
+// Có vật đủ gần trước cảm biến (đủ sáng để đọc màu)?
+bool colorPresent(const RawColor& c, const Params& p);
+// Vật đủ gần để đọc màu tin cậy (thấy RÕ)?
+bool colorNear(const RawColor& c, const Params& p);
+bool isRedSample(const RawColor& c, const Params& p, const Calib& cal);
 
 class ColorVote {
  public:

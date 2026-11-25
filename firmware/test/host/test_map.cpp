@@ -86,3 +86,77 @@ TEST(map_greedy_coverage_from_scratch_covers_everything) {
   uint8_t end = simulate(kH, Dir::N, out, n, &cov, &stopped);
   CHECK_EQ(cov, kAllEdges); CHECK(stopped); CHECK_EQ(end, kA);
 }
+
+TEST(map_directed_index_distinguishes_direction) {
+  CHECK_EQ(dirIndex(kA, kB), 0);
+  CHECK_EQ(dirIndex(kB, kA), 1);
+  CHECK_EQ(dirIndex(kH, kI), 22);
+  CHECK_EQ(dirIndex(kI, kH), 23);
+  CHECK_EQ(dirIndex(kA, kE), 255);
+}
+
+TEST(map_plan_traverses_detects_direction) {
+  // lộ trình mặc định: H -Thẳng-> E -Thẳng-> B -Trái-> A ...
+  CHECK(planTraverses(kH, Dir::N, kDefaultRoute, kDefaultRouteLen, kE, kB));
+  CHECK(planTraverses(kH, Dir::N, kDefaultRoute, kDefaultRouteLen, kB, kA));
+  CHECK(!planTraverses(kH, Dir::N, kDefaultRoute, kDefaultRouteLen, kA, kB));
+}
+
+TEST(map_greedy_satisfies_reverse_traversal_need) {
+  // đã phủ hết, cần đi D->A (đọc vật đã thấy bên phải khi đi A->D) rồi về A
+  Act out[40];
+  uint32_t need = 1ul << dirIndex(kD, kA);
+  uint8_t n = planGreedy(kE, Dir::W, 0, need, kA, out, 40);
+  CHECK(n > 0);
+  CHECK(planTraverses(kE, Dir::W, out, n, kD, kA));
+  uint16_t cov = 0; bool stopped = false;
+  CHECK_EQ(simulate(kE, Dir::W, out, n, &cov, &stopped), kA);
+  CHECK(stopped);
+}
+
+TEST(localizer_keeps_true_pose_and_filters_others) {
+  Localizer l;
+  l.resetAll(NodeShape{true, true, true});   // ngã tư: E (4 hướng), B và H theo trục dọc
+  CHECK(l.count() >= 4);
+  CHECK(l.contains(kE, Dir::N));
+  // đi thẳng từ E hướng Bắc -> tới B: thấy trái + phải (+ thẳng vào nhánh VÒNG 1)
+  l.act(Act::Straight);
+  l.observe(NodeShape{true, true, true});
+  CHECK(l.contains(kB, Dir::N));
+  // rẽ trái ở B -> tới A hướng Tây: A chỉ có rẽ trái
+  l.act(Act::Left);
+  CHECK(l.observe(NodeShape{true, false, false}) >= 1);
+  CHECK(l.contains(kA, Dir::W));
+}
+
+TEST(localizer_inconsistent_observation_keeps_belief) {
+  Localizer l;
+  l.reset(kE, Dir::N);
+  CHECK_EQ(l.observe(NodeShape{true, false, false}), 0);  // E không thể chỉ có rẽ trái
+  CHECK(l.contains(kE, Dir::N));
+  CHECK_EQ(l.count(), 1);
+}
+
+TEST(localizer_relocalizes_after_wrong_turn) {
+  // xe tưởng đang tới D hướng Tây (từ E), thực tế đã rẽ nhầm và tới F hướng Đông.
+  Localizer l;
+  l.resetAll(NodeShape{true, true, true});  // vừa ở E (ngã tư) nhưng chưa chắc hướng
+  l.act(Act::Straight);
+  // D hướng Tây và F hướng Đông đều chỉ có trái + phải -> chưa phân biệt được
+  CHECK(l.observe(NodeShape{true, true, false}) >= 2);
+  // rẽ phải: D(Tây)->A hướng Bắc (A: chỉ phải); F(Đông)->I hướng Nam (I: chỉ phải)...
+  l.act(Act::Right);
+  l.observe(NodeShape{false, true, false});
+  uint8_t n; Dir h;
+  CHECK(l.nearest(kA, Dir::N, n, h));
+  CHECK(l.count() >= 1);
+}
+
+TEST(localizer_dead_end_means_stub) {
+  Localizer l;
+  l.reset(kE, Dir::E);
+  l.deadEnd();
+  CHECK(l.contains(kB, Dir::S));
+  CHECK(l.contains(kH, Dir::N));
+  CHECK_EQ(l.count(), 2);
+}

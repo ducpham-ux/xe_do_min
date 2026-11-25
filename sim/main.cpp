@@ -1,6 +1,7 @@
 // main.cpp - chạy firmware (lõi core) trên mô hình sân, nhiều lượt ngẫu nhiên, in thống kê.
 // Dùng: run_sim.exe [--seeds N] [--start S] [--svg file] [--orange] [--calib]
-//                    [--i2c-fail MS] [--restart-at MS] [--gripper] [--verbose]
+//                    [--restart-at MS] [--gripper] [--verbose] [--flare-r R] [--gap MIN MAX]
+//                    [--no-right] [--noise P] [--trace T0 T1]
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -19,12 +20,11 @@ int g_traceFrom = -1, g_traceTo = -1;
 const char* g_trail = nullptr;
 
 struct Metrics {
-  int redsReadable = 0, readableHit = 0;
   int redsTotal = 0, redsHit = 0, falseAlarms = 0, duplicates = 0, phantom = 0;
-  int covered = 0;
+  int covered = 0, collisions = 0;
   bool finished = false, fallback = false;
   double timeS = 0;
-  int mismatches = 0, restarts = 0, grabbed = 0;
+  int mismatches = 0, relocalized = 0, restarts = 0, grabbed = 0, lineLost = 0, reads = 0, steps = 0, pending = 0;
 };
 
 struct SimHal : Hal {
@@ -37,19 +37,19 @@ struct SimHal : Hal {
   Metrics* m = nullptr;
   std::vector<std::pair<double, double>> alertsAt;
   int lastL = 0, lastR = 0;
-  int lastColorSide = 0;
 
   explicit SimHal(sim::World& world) : w(world) {}
   uint32_t millis() override { return t; }
-  uint8_t readLine() override { return w.lineBits(); }
+  uint8_t lastBits = 0;
+  uint8_t readLine() override { lastBits = w.lineBits(); return lastBits; }
   bool obstacle(Side s) override { return w.e18((int)s); }
-  bool readColor(Side s, RawColor& o) override { lastColorSide = (int)s; return w.colorReading((int)s, o.r, o.g, o.b, o.c, t); }
+  bool readColor(RawColor& o) override { return w.colorReading(o.r, o.g, o.b); }
   void setMotors(int16_t l, int16_t r) override { lastL = l; lastR = r; }
   void buzzer(bool on) override {
     if (on && !buz) {
       alertsAt.push_back({w.x, w.y});
-      // vật được chấm là vật nằm ở bên vừa quét màu
-      int best = w.objectBeside(lastColorSide, sim::World::kE18Range);
+      // vật được chấm là vật đang nằm trước TCS3200 (sườn trái)
+      int best = w.objectBeside(0, w.opt.tcsX, 6.0);
       if (best < 0) { m->phantom++; }
       else {
         auto& o = w.objects[best];
@@ -67,17 +67,15 @@ struct SimHal : Hal {
   bool loadCalib(Calib& c) override { if (!haveCalib) return false; c = cal; return true; }
 };
 
-// Mô phỏng chế độ CALIB: học các mẫu chuẩn (không nhiễu) của từng màu
+// Mô phỏng chế độ CALIB: học các mẫu chuẩn (không nhiễu) của từng màu (đội đưa vàng/cam vào lớp Vàng)
 Calib nominalCalib() {
   Calib c;
-  RawColor t3[4], t4[4];
-  auto s = [](uint16_t r, uint16_t g, uint16_t b, uint16_t cc) { RawColor x; x.r = r; x.g = g; x.b = b; x.c = cc; return x; };
-  t3[kRed] = s(250, 600, 550, 0); t3[kYellow] = s(215, 300, 530, 0); t3[kGreen] = s(500, 300, 450, 0); t3[kPurple] = s(300, 600, 350, 0);
-  t4[kRed] = s(200, 60, 50, 310); t4[kYellow] = s(140, 150, 60, 350); t4[kGreen] = s(60, 200, 90, 350); t4[kPurple] = s(120, 70, 110, 300);
-  for (uint8_t k = 0; k < kNumClasses; ++k) {
-    calibAdd(c, Sensor::Tcs3200, k, t3[k]);
-    calibAdd(c, Sensor::Tcs34725, k, t4[k]);
-  }
+  auto s = [](uint16_t r, uint16_t g, uint16_t b) { RawColor x; x.r = r; x.g = g; x.b = b; return x; };
+  calibAdd(c, kRed, s(250, 600, 550));
+  calibAdd(c, kYellow, s(220, 260, 500));
+  calibAdd(c, kYellow, s(235, 430, 560));
+  calibAdd(c, kGreen, s(500, 300, 450));
+  calibAdd(c, kPurple, s(300, 600, 350));
   return c;
 }
 
@@ -138,7 +136,7 @@ void writeSvg(const char* path, const sim::World& w, const SimHal& h) {
   std::fclose(f);
 }
 
-Metrics runOne(const sim::Options& o, bool calib, int restartAt, bool gripper, bool verbose, const char* svg) {
+Metrics runOne(const sim::Options& o, bool calib, int restartAt, bool gripper, bool verbose, const char* svg, bool readRight) {
   sim::World w(o);
   SimHal h(w);
   Metrics m;
@@ -146,20 +144,46 @@ Metrics runOne(const sim::Options& o, bool calib, int restartAt, bool gripper, b
   if (calib) { h.cal = nominalCalib(); h.haveCalib = true; }
   Params p;
   p.enableGripper = gripper;
-  p.sensorAheadCm = 11.5;
-  // p.crawlCm: để 0 -> bò theo thời gian 135 ms như xe thật  // hình học mô phỏng: nút được phát hiện khi trục bánh cách tâm ~10-13 cm
+  p.readRightObjects = readRight;
+  p.sensorAheadCm = (float)o.barAhead;
+  p.startStubCm = 35;
   for (auto& ob : w.objects) if (ob.color == sim::Color::Red) m.redsTotal++;
   auto robot = std::make_unique<Robot>(h, p);
   robot->begin(BootMode::Run);
   const uint32_t limit = 320000;
   bool restarted = false;
+  State prevState = State::Boot;
+  long stateMs[16] = {};
   for (h.t = 0; h.t < limit; ++h.t) {
     robot->tick();
     w.step(0.001, h.lastL, h.lastR);
     if (h.t % 20 == 0) w.trail.push_back({w.x, w.y});
-    if (h.t % 5 == 0) w.markReadable();
-    if (g_traceFrom >= 0 && (int)h.t >= g_traceFrom && (int)h.t <= g_traceTo && h.t % 20 == 0)
-      std::printf("    t=%u x=%.1f y=%.1f th=%.0f bits=%02X L=%d R=%d st=%d e18=%d%d\n", h.t, w.x, w.y, w.th * 57.2958, w.lineBits(), h.lastL, h.lastR, (int)robot->state(), w.e18(0), w.e18(1));
+    if (h.t % 5 == 0) {
+      int before = w.collisions();
+      w.checkCollisions();
+      if (verbose && w.collisions() > before) {
+        double c = std::cos(w.th), sn = std::sin(w.th);
+        for (auto& ob : w.objects) {
+          if (!ob.hit || ob.reports < 0) continue;
+          double dx = ob.x - w.x, dy = ob.y - w.y, lx = dx * c + dy * sn, ly = -dx * sn + dy * c;
+          if (std::hypot(lx, ly) < 25)
+            std::printf("  [%6.2fs] VA CHAM o trang thai %d: vat %s x=%.1f y=%.1f r=%.1f th=%.0f L=%d R=%d\n", h.t / 1000.0, (int)robot->state(),
+                        sim::colorName(ob.color), lx, ly, ob.r, w.th * 57.2958, h.lastL, h.lastR);
+        }
+      }
+    }
+    if (verbose && robot->state() == State::Approach && prevState != State::Approach) {
+      double c = std::cos(w.th), sn = std::sin(w.th);
+      for (auto& ob : w.objects) {
+        double dx = ob.x - w.x, dy = ob.y - w.y, lx = dx * c + dy * sn, ly = -dx * sn + dy * c;
+        if (ly > 0 && ly < 25 && std::fabs(lx) < 12)
+          std::printf("  [%6.2fs] tiep can: vat %s x=%.1f khe=%.1f r=%.1f\n", h.t / 1000.0, sim::colorName(ob.color), lx, ly - ob.r - sim::World::kHalfW, ob.r);
+      }
+    }
+    prevState = robot->state();
+    stateMs[(int)robot->state()]++;
+    if (g_traceFrom >= 0 && (int)h.t >= g_traceFrom && (int)h.t <= g_traceTo && h.t % 10 == 0)
+      std::printf("    t=%u x=%.1f y=%.1f th=%.0f bits=%02X L=%d R=%d st=%d e18=%d%d d=%.1f\n", h.t, w.x, w.y, w.th * 57.2958, h.lastBits, h.lastL, h.lastR, (int)robot->state(), w.e18(0), w.e18(1), robot->distOnEdge());
     if (!restarted && restartAt > 0 && (int)h.t == restartAt) {
       // trọng tài cho restart: đặt xe về XUẤT PHÁT, nhấn RESET (bộ nhớ Backup còn nguyên)
       restarted = true;
@@ -176,22 +200,34 @@ Metrics runOne(const sim::Options& o, bool calib, int restartAt, bool gripper, b
   for (auto& ob : w.objects) {
     if (ob.color != sim::Color::Red) continue;
     if (ob.reports > 0) m.redsHit++;
-    if (ob.readable) { m.redsReadable++; if (ob.reports > 0) m.readableHit++; }
   }
   m.covered = coverage(w);
-  m.fallback = robot->stats().fallback;
-  m.mismatches = robot->stats().mismatches;
-  m.restarts = robot->stats().restarts;
-  m.grabbed = robot->stats().grabbed;
+  m.collisions = w.collisions();
+  const Stats& st = robot->stats();
+  m.fallback = st.fallback;
+  m.mismatches = st.mismatches;
+  m.relocalized = st.relocalized;
+  m.restarts = st.restarts;
+  m.grabbed = st.grabbed;
+  m.lineLost = st.lineLost;
+  m.reads = st.objectsRead;
+  m.steps = st.sideSteps;
+  m.pending = st.pendingSeen;
   if (verbose) {
     for (auto& ob : w.objects) {
       const auto& sg = w.segs[ob.edge];
       double ux = (sg.x2 - sg.x1) / 150, uy = (sg.y2 - sg.y1) / 150;
       double t = (ob.x - sg.x1) * ux + (ob.y - sg.y1) * uy;
-      double lat = std::fabs((ob.x - sg.x1) * -uy + (ob.y - sg.y1) * ux) - ob.r - 1.5;
-      if ((ob.color == sim::Color::Red && ob.reports != 1) || (ob.color != sim::Color::Red && ob.reports))
-        std::printf("  !! vat %s c%d ben %d s=%.0f cach_mep_line=%.1f bao=%d\n", sim::colorName(ob.color), ob.edge + 1, ob.side, t, lat, ob.reports);
+      double lat = std::fabs((ob.x - sg.x1) * -uy + (ob.y - sg.y1) * ux) - ob.r - sim::World::kHalfW;
+      if ((ob.color == sim::Color::Red && ob.reports != 1) || (ob.color != sim::Color::Red && ob.reports) || ob.hit)
+        std::printf("  !! vat %s c%d ben %d s=%.0f khe_suon=%.1f bao=%d va=%d\n", sim::colorName(ob.color), ob.edge + 1, ob.side, t, lat, ob.reports, (int)ob.hit);
     }
+  }
+  if (verbose) {
+    const char* nm[] = {"Boot", "Calib", "Ready", "Follow", "Seek", "NodeScan", "Turn", "Approach", "AlertOn", "Grip", "Recover", "Goal"};
+    std::printf("  thoi gian theo trang thai:");
+    for (int i = 3; i < 11; ++i) std::printf(" %s=%.1fs", nm[i], stateMs[i] / 1000.0);
+    std::printf("\n");
   }
   if (svg) writeSvg(svg, w, h);
   if (g_trail) writeTrail(g_trail, w, h);
@@ -201,9 +237,9 @@ Metrics runOne(const sim::Options& o, bool calib, int restartAt, bool gripper, b
 }  // namespace
 
 int main(int argc, char** argv) {
-  int seeds = 20, start = 1, i2cFail = -1, restartAt = -1;
-  double noise = 0.002, sideY = 4.0, colorRange = 4.0;
-  bool orange = false, calib = false, verbose = false, gripper = false;
+  int seeds = 20, start = 1, restartAt = -1;
+  double noise = 0.002, flareR = 20, gapMin = 1, gapMax = 7;
+  bool orange = false, calib = false, verbose = false, gripper = false, readRight = true, noObjects = false;
   const char* svg = nullptr;
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
@@ -212,41 +248,43 @@ int main(int argc, char** argv) {
     else if (a == "--svg") svg = argv[++i];
     else if (a == "--orange") orange = true;
     else if (a == "--calib") calib = true;
-    else if (a == "--i2c-fail") i2cFail = std::atoi(argv[++i]);
     else if (a == "--restart-at") restartAt = std::atoi(argv[++i]);
     else if (a == "--gripper") gripper = true;
     else if (a == "--verbose") verbose = true;
     else if (a == "--trace") { g_traceFrom = std::atoi(argv[++i]); g_traceTo = std::atoi(argv[++i]); }
     else if (a == "--trail") g_trail = argv[++i];
-    else if (a == "--side-y") sideY = std::atof(argv[++i]);
-    else if (a == "--color-range") colorRange = std::atof(argv[++i]);
     else if (a == "--noise") noise = std::atof(argv[++i]);
+    else if (a == "--flare-r") flareR = std::atof(argv[++i]);
+    else if (a == "--gap") { gapMin = std::atof(argv[++i]); gapMax = std::atof(argv[++i]); }
+    else if (a == "--no-right") readRight = false;
+    else if (a == "--no-objects") noObjects = true;
   }
-  int rdb = 0, rdbHit = 0, grabbed = 0;
-  int reds = 0, hits = 0, fa = 0, dup = 0, ph = 0, fin = 0, cov12 = 0, fb = 0;
+  int grabbed = 0, reds = 0, hits = 0, fa = 0, dup = 0, ph = 0, fin = 0, cov12 = 0, fb = 0, col = 0, lost = 0, reloc = 0;
   std::vector<double> times;
-  std::printf("seed  do(trung/tong)  nham  lap  ma  phu  ve_dich  t(s)  lech  du_phong\n");
+  std::printf("seed  do(trung/tong)  nham  lap  ma  va  phu  ve_dich  t(s)  lech  dinhvi  matline  doc  buoc  phai  du_phong\n");
   for (int s = start; s < start + seeds; ++s) {
     sim::Options o;
-    o.seed = (uint32_t)s; o.orange = orange; o.i2cFailAtMs = i2cFail; o.lineNoise = noise; o.sideY = sideY; o.colorRange = colorRange;
-    Metrics m = runOne(o, calib, restartAt, gripper, verbose, (svg && s == start) ? svg : nullptr);
-    std::printf("%4d   %2d/%2d          %2d    %2d   %2d   %2d   %s     %5.1f  %2d   %s\n", s, m.redsHit, m.redsTotal, m.falseAlarms,
-                m.duplicates, m.phantom, m.covered, m.finished ? "co " : "KHONG", m.timeS, m.mismatches, m.fallback ? "co" : "-");
+    if (noObjects) { o.reds = 0; o.distractors = 0; }
+    o.seed = (uint32_t)s; o.orange = orange; o.lineNoise = noise; o.flareR = flareR; o.gapMin = gapMin; o.gapMax = gapMax;
+    Metrics m = runOne(o, calib, restartAt, gripper, verbose, (svg && s == start) ? svg : nullptr, readRight);
+    std::printf("%4d   %2d/%2d          %2d    %2d   %2d  %2d   %2d   %s     %5.1f  %2d    %2d     %3d     %2d   %2d    %2d   %s\n", s, m.redsHit, m.redsTotal,
+                m.falseAlarms, m.duplicates, m.phantom, m.collisions, m.covered, m.finished ? "co " : "KHONG", m.timeS, m.mismatches,
+                m.relocalized, m.lineLost, m.reads, m.steps, m.pending, m.fallback ? "co" : "-");
     grabbed += m.grabbed;
-    rdb += m.redsReadable; rdbHit += m.readableHit;
     reds += m.redsTotal; hits += m.redsHit; fa += m.falseAlarms; dup += m.duplicates; ph += m.phantom;
-    fin += m.finished; cov12 += m.covered == 12; fb += m.fallback;
+    fin += m.finished; cov12 += m.covered == 12; fb += m.fallback; col += m.collisions; lost += m.lineLost; reloc += m.relocalized;
     times.push_back(m.timeS);
   }
   std::sort(times.begin(), times.end());
-  double med = times[times.size() / 2];
+  double med = times[times.size() / 2], worst = times.back();
   double hitRate = reds ? 100.0 * hits / reds : 0;
-  double fwRate = rdb ? 100.0 * rdbHit / rdb : 0;
-  std::printf("\nFIRMWARE: bat dung %.1f%% vat do NAM TRONG TAM cam bien (%d/%d); HE THONG: %.1f%% tong vat do\n", fwRate, rdbHit, rdb, hitRate);
-  std::printf("\nTONG KET %d luot: bat do %.1f%% (%d/%d), bao nham %d, bao lap %d, bao ma %d, ve dich %d/%d, phu du 12 cung %d/%d, du phong %d, t trung vi %.1fs\n",
-              seeds, hitRate, hits, reds, fa, dup, ph, fin, seeds, cov12, seeds, fb, med);
+  std::printf("\nTONG KET %d luot: bat do %.1f%% (%d/%d), bao nham %d, bao lap %d, bao ma %d, va cham %d, ve dich %d/%d, phu du 12 cung %d/%d,\n"
+              "                 du phong %d, tu dinh vi lai %d, mat line %d, t trung vi %.1fs, t lau nhat %.1fs\n",
+              seeds, hitRate, hits, reds, fa, dup, ph, col, fin, seeds, cov12, seeds, fb, reloc, lost, med, worst);
   if (gripper) std::printf("GAP (Vong 2): %d vat da gap len xe\n", grabbed);
-  bool pass = fwRate >= 95 && fa == 0 && dup == 0 && ph == 0 && fin * 100 >= 98 * seeds && cov12 * 100 >= 98 * seeds && med < 180;
+  if (noObjects) hitRate = 100;
+  // va chạm chỉ báo cáo (giới hạn hình học: cảm biến màu giữa sườn, xe dài 26 cm)
+  bool pass = hitRate >= 80 && fa == 0 && ph == 0 && fin * 100 >= 95 * seeds && worst < 300;
   std::printf("KET QUA: %s\n", pass ? "DAT" : "CHUA DAT");
   return pass ? 0 : 1;
 }

@@ -5,10 +5,9 @@
 namespace sim {
 
 namespace {
-const double kPi = 3.14159265358979323846;
 const int kEdges[12][2] = {{0, 1}, {1, 2}, {0, 3}, {1, 4}, {2, 5}, {3, 4},
                            {4, 5}, {3, 6}, {4, 7}, {5, 8}, {6, 7}, {7, 8}};
-const double kHalfLine = 1.5;  // line rộng 3 cm
+const double kHalfLine = 1.4;  // line rộng 2,8 cm
 
 double distSeg(double px, double py, const Seg& s) {
   double dx = s.x2 - s.x1, dy = s.y2 - s.y1;
@@ -42,9 +41,9 @@ World::World(const Options& o) : opt(o), rng_(o.seed) {
   }
   segs.push_back({150, 0, 150, -45});    // nhánh XUẤT PHÁT
   segs.push_back({150, 300, 150, 340});  // nhánh VÒNG 1
-  // loa bo cung tròn R = 15 cm ở 4 góc phần tư của B, E, H
+  // loa bo cung tròn ở 4 góc phần tư của B, E, H
   const int flareNodes[3] = {1, 4, 7};
-  const double R = 15;
+  const double R = opt.flareR;
   for (int n : flareNodes) {
     double nx, ny; nodeXY(n, nx, ny);
     for (int sx = -1; sx <= 1; sx += 2)
@@ -66,23 +65,21 @@ World::World(const Options& o) : opt(o), rng_(o.seed) {
     for (int tries = 0; tries < 200; ++tries) {
       double t = 30 + 90 * u01(rng_);
       int side = u01(rng_) < 0.5 ? 0 : 1;
-      double d = 3 + 4 * u01(rng_);  // khoảng cách mép line -> mép vật: 5 +- 2 cm
-      double r = 3;
+      double r = 2 + 2 * u01(rng_);                         // đường kính 4-8 cm
+      double gap = opt.gapMin + (opt.gapMax - opt.gapMin) * u01(rng_);
       bool ok = true;
-      for (auto& ob : objects) {
-        if (ob.edge != edge || ob.side != side) continue;
-        const Seg& s = segs[edge];
-        double ux = (s.x2 - s.x1) / 150, uy = (s.y2 - s.y1) / 150;
-        double tt = (ob.x - s.x1) * ux + (ob.y - s.y1) * uy;
-        if (std::fabs(tt - t) < 15) ok = false;
-      }
-      if (!ok) continue;
       const Seg& s = segs[edge];
       double ux = (s.x2 - s.x1) / 150, uy = (s.y2 - s.y1) / 150;
+      for (auto& ob : objects) {
+        if (ob.edge != edge || ob.side != side) continue;
+        double tt = (ob.x - s.x1) * ux + (ob.y - s.y1) * uy;
+        if (std::fabs(tt - t) < ob.r + r + 3) ok = false;   // cho phép cụm vật sát nhau
+      }
+      if (!ok) continue;
       double nxv = -uy, nyv = ux;  // pháp tuyến trái
-      double off = kHalfLine + d + r;
+      double off = kHalfW + gap + r;
       double sgn = side == 0 ? 1 : -1;
-      objects.push_back({s.x1 + ux * t + sgn * nxv * off, s.y1 + uy * t + sgn * nyv * off, r, c, edge, side, 0});
+      objects.push_back({s.x1 + ux * t + sgn * nxv * off, s.y1 + uy * t + sgn * nyv * off, r, c, edge, side});
       return;
     }
   };
@@ -120,10 +117,9 @@ void World::step(double dt, int pwmL, int pwmR) {
 }
 
 void World::sensorPos(int i, double& px, double& py) const {
-  // i: 0=L2 1=L1 2=M 3=R1 4=R2 ; trái = +y trong hệ xe
-  const double ang[5] = {60, 30, 0, -30, -60};
-  double a = ang[i] * kPi / 180;
-  double fx = 6 + 5 * std::cos(a), fy = 5 * std::sin(a);
+  // i: 0=L2 1=L1 2=M 3=R1 4=R2 ; trái = +y trong hệ xe; thanh thẳng, mắt cách 1,75 cm
+  const double off[5] = {3.5, 1.75, 0, -1.75, -3.5};
+  double fx = opt.barAhead, fy = off[i];
   px = x + fx * std::cos(th) - fy * std::sin(th);
   py = y + fx * std::sin(th) + fy * std::cos(th);
 }
@@ -140,9 +136,10 @@ uint8_t World::lineBits() {
   return b;
 }
 
-double World::rayHit(int side, const Object& o) const {
-  double sy = side == 0 ? opt.sideY : -opt.sideY;
-  double ox = x - sy * std::sin(th), oy = y + sy * std::cos(th);
+// Tia vuông góc từ sườn xe (điểm dọc x0 so với tâm quay) ra ngoài.
+double World::rayHit(int side, double x0, const Object& o) const {
+  double sy = side == 0 ? kHalfW : -kHalfW;
+  double ox = x + x0 * std::cos(th) - sy * std::sin(th), oy = y + x0 * std::sin(th) + sy * std::cos(th);
   double dx = side == 0 ? -std::sin(th) : std::sin(th);
   double dy = side == 0 ? std::cos(th) : -std::cos(th);
   double cx = o.x - ox, cy = o.y - oy;
@@ -154,59 +151,58 @@ double World::rayHit(int side, const Object& o) const {
   return tHit < 0 ? 0 : tHit;
 }
 
-int World::objectBeside(int side, double maxDist) const {
+int World::objectBeside(int side, double x0, double maxDist, double* dist) const {
   int best = -1; double bd = 1e9;
   for (size_t i = 0; i < objects.size(); ++i) {
-    double d = rayHit(side, objects[i]);
+    double d = rayHit(side, x0, objects[i]);
     if (d >= 0 && d <= maxDist && d < bd) { bd = d; best = (int)i; }
   }
+  if (dist) *dist = bd;
   return best;
 }
 
-void World::markReadable() {
-  for (int s = 0; s < 2; ++s) {
-    int i = objectBeside(s, opt.colorRange);
-    if (i >= 0) objects[i].readable = true;
-  }
-}
+bool World::e18(int side) const { return objectBeside(side, opt.e18X, kE18Range) >= 0; }
 
-bool World::e18(int side) const { return objectBeside(side, kE18Range) >= 0; }
-
-bool World::colorReading(int side, uint16_t& r, uint16_t& g, uint16_t& b, uint16_t& c, uint32_t nowMs) {
-  if (side == 1 && opt.i2cFailAtMs >= 0 && (int)nowMs >= opt.i2cFailAtMs) return false;
+bool World::colorReading(uint16_t& r, uint16_t& g, uint16_t& b) {
   std::normal_distribution<double> nz(1.0, opt.colorNoise);
-  int idx = objectBeside(side, opt.colorRange);
   double d = 0;
-  Color col = Color::Red;
-  bool have = idx >= 0;
-  if (have) { col = objects[idx].color; d = rayHit(side, objects[idx]); }
-  if (side == 0) {  // TCS3200: chu kỳ (us), nhỏ = sáng
-    double R, G, B;
-    if (!have) { R = 900; G = 950; B = 850; }
-    else switch (col) {
+  int idx = objectBeside(0, opt.tcsX, 6.0, &d);
+  double R, G, B;
+  if (idx < 0) { R = 1500; G = 1600; B = 1400; }   // không có vật: nền tối, chu kỳ dài
+  else {
+    switch (objects[idx].color) {
       case Color::Red: R = 250; G = 600; B = 550; break;
       case Color::Yellow: R = 220; G = 260; B = 500; break;
-      case Color::Orange: R = 215; G = 380; B = 560; break;
+      case Color::Orange: R = 235; G = 430; B = 560; break;
       case Color::Green: R = 500; G = 300; B = 450; break;
       default: R = 300; G = 600; B = 350; break;
     }
-    double f = 1 + 0.15 * std::max(0.0, d - 1.5);
-    r = (uint16_t)(R * f * nz(rng_)); g = (uint16_t)(G * f * nz(rng_)); b = (uint16_t)(B * f * nz(rng_)); c = 0;
-  } else {  // TCS34725: số đếm, lớn = sáng (LED cam làm kênh G cao hơn thực tế)
-    double R, G, B;
-    if (!have) { R = 20; G = 15; B = 12; }
-    else switch (col) {
-      case Color::Red: R = 200; G = 60; B = 50; break;
-      case Color::Yellow: R = 140; G = 150; B = 60; break;
-      case Color::Orange: R = 230; G = 150; B = 55; break;
-      case Color::Green: R = 60; G = 200; B = 90; break;
-      default: R = 120; G = 70; B = 110; break;
-    }
-    double f = 1 / (1 + 0.2 * std::max(0.0, d - 1.5));
-    r = (uint16_t)(R * f * nz(rng_)); g = (uint16_t)(G * f * nz(rng_)); b = (uint16_t)(B * f * nz(rng_));
-    c = (uint16_t)(r + g + b);
+    // ánh sáng phản xạ giảm nhanh theo khoảng cách: tốt nhất ~1,5 cm
+    double f = 1 + 0.5 * std::max(0.0, d - 1.5);
+    f *= f;
+    R *= f; G *= f; B *= f;
   }
+  auto cl = [](double v) { return (uint16_t)std::min(3000.0, std::max(1.0, v)); };
+  r = cl(R * nz(rng_)); g = cl(G * nz(rng_)); b = cl(B * nz(rng_));
   return true;
+}
+
+// Thân xe (hình chữ nhật 26 x 16) chạm vật nào thì đánh dấu.
+void World::checkCollisions() {
+  double c = std::cos(th), s = std::sin(th);
+  for (auto& o : objects) {
+    if (o.hit) continue;
+    double dx = o.x - x, dy = o.y - y;
+    double lx = dx * c + dy * s, ly = -dx * s + dy * c;   // vào hệ xe
+    double qx = std::max(-kHalfL, std::min(kHalfL, lx)), qy = std::max(-kHalfW, std::min(kHalfW, ly));
+    if (std::hypot(lx - qx, ly - qy) < o.r) o.hit = true;
+  }
+}
+
+int World::collisions() const {
+  int n = 0;
+  for (auto& o : objects) n += o.hit;
+  return n;
 }
 
 }  // namespace sim

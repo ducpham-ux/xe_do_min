@@ -10,10 +10,9 @@ enum class Side : uint8_t { Left = 0, Right = 1 };
 // Bit cảm biến line: bit0=L2, bit1=L1, bit2=M, bit3=R1, bit4=R2 ; 1 = thấy vạch đen
 enum LineBit : uint8_t { kL2 = 1, kL1 = 2, kM = 4, kR1 = 8, kR2 = 16 };
 
-// Giá trị màu thô.
-//  - TCS3200 (trái): r,g,b là CHU KỲ xung (us) -> càng NHỎ càng nhiều ánh sáng; c không dùng.
-//  - TCS34725 (phải): r,g,b,c là số đếm 16 bit -> càng LỚN càng nhiều ánh sáng.
-struct RawColor { uint16_t r = 0, g = 0, b = 0, c = 0; };
+// Giá trị màu thô của TCS3200 (sườn TRÁI): r,g,b là CHU KỲ xung (us) -> càng NHỎ càng sáng.
+// 0 = hết thời gian chờ (không có ánh sáng đủ mạnh).
+struct RawColor { uint16_t r = 0, g = 0, b = 0; };
 
 struct Calib;  // color.h
 
@@ -23,8 +22,8 @@ class Hal {
   virtual uint32_t millis() = 0;
   virtual uint8_t readLine() = 0;
   virtual bool obstacle(Side s) = 0;
-  // false = lỗi cảm biến (ví dụ I2C không phản hồi)
-  virtual bool readColor(Side s, RawColor& out) = 0;
+  // Đọc TCS3200 (chỉ có ở sườn trái). false = lỗi / không có xung.
+  virtual bool readColor(RawColor& out) = 0;
   virtual void setMotors(int16_t left, int16_t right) = 0;  // -255..255, dương = tiến
   virtual void buzzer(bool on) = 0;
   virtual void led(bool on) = 0;

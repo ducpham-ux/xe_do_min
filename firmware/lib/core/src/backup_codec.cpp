@@ -18,16 +18,19 @@ uint16_t getBits(const uint16_t* words, uint16_t& pos, uint8_t bits) {
 
 bool encodeBackup(uint16_t regs[kBackupRegs], uint16_t covered, const ObjectTracker& t, uint8_t restarts, uint16_t elapsedS) {
   for (uint8_t i = 0; i < kBackupRegs; ++i) regs[i] = 0;
-  uint8_t n = t.count() > kBackupMaxObjects ? kBackupMaxObjects : t.count();
-  regs[0] = (uint16_t)(0xA000u | (covered & 0x0FFFu));
-  regs[1] = (uint16_t)(((restarts & 0x0Fu) << 8) | n);
+  // chỉ lưu vật ĐỎ đã báo (vật khác / chờ đọc không cần nhớ qua restart)
+  uint8_t n = 0;
   uint16_t pos = 0;
-  for (uint8_t i = 0; i < n; ++i) {
+  for (uint8_t i = 0; i < t.count() && n < kBackupMaxObjects; ++i) {
     const auto& e = t.at(i);
+    if (e.cls != ObjClass::Red) continue;
+    ++n;
     putBits(regs + 2, pos, e.edge, 4);
     putBits(regs + 2, pos, (uint16_t)e.side, 1);
     putBits(regs + 2, pos, e.s, 8);
   }
+  regs[0] = (uint16_t)(0xA000u | (covered & 0x0FFFu));
+  regs[1] = (uint16_t)(((restarts & 0x0Fu) << 8) | n);
   pos = 117;
   putBits(regs + 2, pos, elapsedS > 511 ? 511 : elapsedS, 9);
   return true;
@@ -46,7 +49,7 @@ bool decodeBackup(const uint16_t regs[kBackupRegs], uint16_t& covered, ObjectTra
     Side side = getBits(regs + 2, pos, 1) ? Side::Right : Side::Left;
     uint8_t s = (uint8_t)getBits(regs + 2, pos, 8);
     if (edge > kStartStubEdge) return false;
-    t.mark(edge, side, s);
+    t.mark(edge, side, s, ObjClass::Red, kRestoredPass);
   }
   if (elapsedS) { pos = 117; *elapsedS = getBits(regs + 2, pos, 9); }
   return true;

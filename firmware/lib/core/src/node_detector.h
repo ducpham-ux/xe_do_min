@@ -1,12 +1,18 @@
-// node_detector.h - phát hiện và phân loại nút giao.
-// Thanh mắt xếp bán nguyệt nên khi qua vạch ngang các mắt chạm đen LẦN LƯỢT
-// (M -> L1/R1 -> L2/R2). Vì vậy không đòi hỏi mọi mắt đen cùng lúc mà:
-//  1) ứng viên: mắt ngoài + ít nhất 1 mắt giữa đen trong N mẫu liên tiếp;
-//  2) bò thẳng SCAN_TIME, tích lũy (OR) mắt ngoài trái/phải;
-//  3) kết thúc: còn mắt giữa thấy line -> còn lối thẳng.
+// node_detector.h - phát hiện và phân loại nút giao với thanh 5 mắt THẲNG HÀNG.
+//
+// Vạch ngang thật (vuông góc): cả dải đen liền từ M ra mắt ngoài, kéo dài ~2,8 cm theo hướng đi,
+// sau đó mắt ngoài trắng cùng lúc.
+// Cung bo 45° ở ngã tư (B, E, H): khi đi tới, cung tách dần khỏi line ->
+//   1) line "phình" 3 mắt (L1 M R1) vài cm,
+//   2) phình hết thanh rất ngắn (~1-1,5 cm) - dễ nhầm là vạch ngang,
+//   3) rồi TÁCH thành dải riêng ở mắt ngoài (mẫu "split": L2 . M . R2).
+// Quy tắc: sự kiện vạch ngang chỉ được nhận khi đủ dài (minCrossCm, hoặc suspectCrossCm nếu
+// ngay trước đó có phình 3 mắt) và kết thúc KHÔNG phải bằng mẫu tách khi còn ngắn.
+// Kết quả chỉ báo nhánh trái/phải; lối thẳng do Robot xét sau khi bò thêm straightCheckCm.
 #pragma once
 #include <stdint.h>
 #include "hal.h"
+#include "line_pos.h"
 #include "params.h"
 
 namespace core {
@@ -32,16 +38,25 @@ class NodeDetector {
  public:
   explicit NodeDetector(const Params& p) : p_(p) {}
   void reset();
-  bool feedCandidate(uint8_t bits);  // gọi mỗi mẫu khi đang bám line
-  void beginScan();
-  void accumulate(uint8_t bits);     // gọi mỗi mẫu trong lúc bò vào tâm nút
-  NodeShape finish(uint8_t bitsAfter) const;
+  // Gọi mỗi mẫu khi đang bám line trong cổng xét nút; ds = quãng vừa đi (cm).
+  // Trả về true đúng 1 lần khi vừa đi qua HẾT một vạch ngang thật; shape() cho trái/phải.
+  bool feed(const LineScan& s, float ds);
+  NodeShape shape() const { return shape_; }
+  bool flareSeen() const { return flare_; }
+  // Nút có cung bo (B, E, H): chỉ nhận vạch ngang SAU khi đã thấy mẫu tách (cung bo rời line).
+  void setRequireSplit(bool on) { requireSplit_ = on; }
+  bool inCross() const { return inCross_; }
+  uint8_t rejected() const { return rejected_; }  // số sự kiện bị loại (cung bo / nhiễu)
 
  private:
+  void finishEvent(bool endedBySplit);
   const Params& p_;
-  uint8_t run_ = 0;
-  bool sawL_ = false, sawR_ = false;
-  uint8_t runL_ = 0, runR_ = 0;  // số mẫu liên tiếp (lọc nhiễu 1 mẫu)
+  bool inCross_ = false, suspect_ = false, flare_ = false, confirmed_ = false, requireSplit_ = false;
+  float crossDist_ = 0, wideDist_ = 0, narrowDist_ = 0;
+  uint16_t nL_ = 0, nR_ = 0;
+  uint8_t endRun_ = 0, rejected_ = 0;
+  bool endSplit_ = false, flareAtStart_ = false;
+  NodeShape shape_;
 };
 
 }  // namespace core

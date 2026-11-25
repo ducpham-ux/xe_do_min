@@ -36,3 +36,13 @@ Final: fixed TEST mode bị watchdog reset do delay(1000) — không có khung t
 Final: minor (deferred): chế độ dự phòng coi 'toàn trắng sau 45 s' là ĐÍCH (giữ hành vi cũ) — có thể dừng ở đầu nhánh cụt
 Final: minor (deferred): quét trượt đi thẳng không bám line tối đa 8 cm
 Final: minor (deferred): hình bản đồ sân không thể hiện rõ cung loa bo
+
+## Sau báo cáo test lần 1 (2026-11-25)
+Ruling: hình học mới do chủ sở hữu cung cấp: thanh 5 mắt thẳng 7 cm, cách tâm quay 12 cm (đã hỏi), TCS3200 ở sườn trái nhìn ngang (đã hỏi).
+Ruling: vùng cung bo (B/E/H) chỉ lái theo mẫu sạch, mẫu bẩn giữ thẳng — các cách "đoán line trong dải phình" (cửa sổ 2 mắt, chỉ 3 mắt giữa) đều tự khóa vào cung bo trong mô phỏng.
+Ruling: ở B/E/H chỉ nhận vạch ngang sau khi thấy mẫu tách — dải phình khi xe hơi lệch góc dài ngang vạch thật, không tách được bằng độ dài.
+Ruling: vật bên phải không dừng mà ghi nhớ + đi ngược cung; lập lại lộ trình tham lam toàn bộ (83% đỏ) thay vì nối thêm vào lộ trình phủ tối ưu (71%) — đổi lại có lượt chưa phủ đủ 12 cung (không bị trừ điểm).
+Ruling: trở về line bằng đảo ngược từng bước dịch ngang; 2 cách nhanh hơn (tiến 18 cm rồi nhập chéo; gộp 1 bước lớn) làm va chạm tăng 2-3 lần trong mô phỏng -> tắt (rejoinMinToNodeCm = 10000).
+Ruling: đỏ khi >= 4 mẫu VÀ >= 60% mẫu — vật cam + CALIB: báo nhầm 7 -> 1 trên 20 lượt.
+Ruling: tiêu chí mô phỏng đổi thành bắt đỏ >= 80%, 0 báo nhầm, về đích >= 95%; va chạm chỉ báo cáo (giới hạn hình học, đã nêu khuyến nghị phần cứng).
+Kết quả: 69 unit test đạt; pio build 2 cấu hình đạt; mô phỏng 50 lượt: về đích 50/50, 0 báo nhầm, 80,8% đỏ, trung vị 271 s.

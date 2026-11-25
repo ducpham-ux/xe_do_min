@@ -37,4 +37,36 @@ uint8_t planPath(uint8_t node, Dir heading, uint8_t target, Act* out, uint8_t ma
 // Lộ trình tham lam: đi các cung chưa phủ gần nhất, rồi về target.
 uint8_t planCoverage(uint8_t node, Dir heading, uint16_t covered, uint8_t target, Act* out, uint8_t max);
 
+// Cung CÓ HƯỚNG: chỉ số = cung*2 + (from<to ? 0 : 1); 255 nếu from-to không phải cung.
+uint8_t dirIndex(uint8_t from, uint8_t to);
+// Lộ trình tham lam tổng quát: thỏa mọi nhu cầu (needEdges: cung phải đi qua ít nhất 1 lần;
+// needDir: cung có hướng phải đi theo đúng chiều - để đọc vật bằng sườn trái), rồi về target.
+uint8_t planGreedy(uint8_t node, Dir heading, uint16_t needEdges, uint32_t needDir, uint8_t target, Act* out, uint8_t max);
+// Thực hiện acts từ (node, heading) có đi qua cung from->to không?
+bool planTraverses(uint8_t node, Dir heading, const Act* acts, uint8_t n, uint8_t from, uint8_t to);
+
+// ---------------------------------------------------------------------------------------------
+// Định vị đa giả thuyết ("tự dựng hình" vị trí trong MCU): giữ tập mọi trạng thái (nút, hướng tới)
+// còn khớp với chuỗi hình dạng nút đã đo và hành động đã làm. Khi đo sai bản đồ, xe không mất
+// phương hướng ngay mà lọc dần tới vị trí thật rồi lập lại lộ trình.
+class Localizer {
+ public:
+  void reset(uint8_t node, Dir h) { bits_ = stateBit(node, h); }
+  void resetAll(const NodeShape& s);          // mọi trạng thái khớp hình dạng s
+  // Lọc theo hình dạng vừa đo. Trả về số giả thuyết còn lại; nếu 0 thì GIỮ NGUYÊN tập cũ
+  // (coi phép đo là nhiễu) và trả 0.
+  uint8_t observe(const NodeShape& s);
+  void act(Act a);                            // dịch mọi giả thuyết theo hành động tại nút
+  void deadEnd();                             // vừa gặp nhánh cụt: chỉ có thể là VÒNG 1 hoặc XUẤT PHÁT
+  bool contains(uint8_t node, Dir h) const { return (bits_ >> (node * 4 + (uint8_t)h)) & 1u; }
+  uint8_t count() const;
+  // giả thuyết gần (nút, hướng) ước lượng nhất theo khoảng cách lưới
+  bool nearest(uint8_t node, Dir h, uint8_t& outNode, Dir& outH) const;
+  uint64_t raw() const { return bits_; }
+
+ private:
+  static uint64_t stateBit(uint8_t node, Dir h) { return 1ull << (node * 4 + (uint8_t)h); }
+  uint64_t bits_ = 0;
+};
+
 }  // namespace core

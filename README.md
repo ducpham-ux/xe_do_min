@@ -19,14 +19,20 @@ Vòng 1: dò line, báo vật đỏ. Vòng 2: gắp rác.
 ## Khởi động (nút RESET = START)
 
 - Không che gì: chạy thi đấu sau 1 giây.
-- Che E18 **trái**: CALIB học màu (nên làm tại sân).
+- Che E18 **trái**: CALIB học màu TCS3200 (nên làm tại sân).
 - Che E18 **phải**: TEST, in giá trị cảm biến ra PB5 (57600 baud).
 - Che **cả hai**: xóa bộ nhớ restart.
 
-## Kết quả mô phỏng (50 lượt, vật đặt ngẫu nhiên)
+## Thay đổi sau test lần 1
 
-Về đích 50/50 · phủ đủ 12 cung 50/50 · 0 báo nhầm · 0 báo lặp ·
-bắt đúng 96,8% vật đỏ trong tầm cảm biến · thời gian trung vị 83 s.
+Xem `docs/thay_doi_sau_test_lan_1.md`: thanh 5 mắt thẳng 7 cm, chạy chậm hơn, bỏ qua cung bo 45°,
+bỏ TCS34725, tiếp cận vật bằng dịch ngang cho TCS3200 (1,5 cm), đi ngược cung để đọc vật bên phải,
+tự định vị lại trên bản đồ.
+
+## Kết quả mô phỏng (50 lượt, 8 đỏ + 16 nhiễu đặt ngẫu nhiên)
+
+Về đích 50/50 · 0 báo nhầm · bắt 80,8% vật đỏ · thời gian trung vị 271 s.
+Không vật thể: 90/90 lượt đi đúng toàn bộ lộ trình với cung bo R = 15/20/25 cm.
 Chi tiết ở `docs/ket_qua_mo_phong/`.
 
 ## Cấu trúc
@@ -42,5 +48,5 @@ tai_lieu/   tài liệu Word + hình
 ## Chưa kiểm trên xe thật
 
 Firmware mới được kiểm bằng unit test, mô phỏng và biên dịch chéo.
-Trước khi thi cần đo `vBaseCmS`, `pwmDeadband`, `sensorAheadCm`, `turnMinMs`,
-kiểm tra chiều động cơ (`MOTOR_*_INVERT`) và chạy CALIB (xem Hướng dẫn mục 6–7).
+Trước khi thi cần đo các tham số trong `docs/thay_doi_sau_test_lan_1.md` mục 7
+(`vBaseCmS`, `turnRateDegS`, `sensorAheadCm`, ngưỡng TCS3200, chiều động cơ) và chạy CALIB.

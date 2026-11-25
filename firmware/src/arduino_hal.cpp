@@ -1,6 +1,5 @@
 #include "arduino_hal.h"
 #include <SoftwareSerial.h>
-#include <Wire.h>
 #include <utility/stm32_eeprom.h>  // API Flash của thư viện EEPROM (ghi đệm 1 trang)
 #include "backup.h"
 #include "pins.h"
@@ -40,13 +39,6 @@ void ArduinoHal::begin() {
 #if DEBUG_LOG
   dbg.begin(DEBUG_BAUD);
 #endif
-  Wire.setSDA(PIN_SDA);
-  Wire.setSCL(PIN_SCL);
-  Wire.begin();
-  Wire.setClock(100000);
-  tcsOk_ = tcs34725Init();
-  if (!tcsOk_) log("CANH BAO: khong thay TCS34725 (kiem tra PB6/PB7)");
-
   enableBackupDomain();
 #if ENABLE_GRIPPER
   gServo[0].attach(PIN_SERVO_ARM);
@@ -78,66 +70,12 @@ uint16_t ArduinoHal::tcs3200Channel(uint8_t s2, uint8_t s3) {
   return us > 65535 ? 65535 : (uint16_t)us;
 }
 
-bool ArduinoHal::readColor(Side s, core::RawColor& out) {
-  if (s == Side::Left) {
-    out.r = tcs3200Channel(LOW, LOW);
-    out.g = tcs3200Channel(HIGH, HIGH);
-    out.b = tcs3200Channel(LOW, HIGH);
-    out.c = 0;
-    return true;  // 0 = hết thời gian chờ -> lõi tự coi là "không có vật"
-  }
-  if (!tcsOk_) {
-    if (++i2cFails_ % 20 == 0) { i2cRecover(); tcsOk_ = tcs34725Init(); }
-    return false;
-  }
-  Wire.beginTransmission(TCS34725_ADDR);
-  Wire.write(0x80 | 0x20 | 0x14);  // lệnh + tự tăng địa chỉ, bắt đầu từ CDATAL
-  if (Wire.endTransmission(false) != 0 || Wire.requestFrom(TCS34725_ADDR, 8) != 8) {
-    tcsOk_ = false;
-    return false;
-  }
-  uint16_t v[4];
-  for (int i = 0; i < 4; ++i) { uint8_t lo = Wire.read(); uint8_t hi = Wire.read(); v[i] = (uint16_t)(lo | (hi << 8)); }
-  out.c = v[0]; out.r = v[1]; out.g = v[2]; out.b = v[3];
-  i2cFails_ = 0;
-  return true;
-}
-
-bool ArduinoHal::tcsWrite(uint8_t reg, uint8_t val) {
-  Wire.beginTransmission(TCS34725_ADDR);
-  Wire.write(0x80 | reg);
-  Wire.write(val);
-  return Wire.endTransmission() == 0;
-}
-
-bool ArduinoHal::tcs34725Init() {
-  Wire.beginTransmission(TCS34725_ADDR);
-  Wire.write(0x80 | 0x12);  // thanh ghi ID
-  if (Wire.endTransmission(false) != 0 || Wire.requestFrom(TCS34725_ADDR, 1) != 1) return false;
-  uint8_t id = Wire.read();
-  if (id != 0x44 && id != 0x4D) return false;
-  bool ok = tcsWrite(0x01, 0xF6);   // (đã đo thật) ATIME: tích phân ~24 ms
-  ok &= tcsWrite(0x0F, 0x03);       // (đã đo thật) gain 60x
-  ok &= tcsWrite(0x00, 0x01);       // PON
-  delay(3);
-  ok &= tcsWrite(0x00, 0x03);       // PON + AEN
-  return ok;
-}
-
-void ArduinoHal::i2cRecover() {
-  // Giải phóng bus I2C bị treo: phát 9 xung SCL rồi điều kiện STOP
-  Wire.end();
-  pinMode(PIN_SDA, INPUT_PULLUP);
-  pinMode(PIN_SCL, OUTPUT_OPEN_DRAIN);
-  for (int i = 0; i < 9; ++i) {
-    digitalWrite(PIN_SCL, LOW); delayMicroseconds(5);
-    digitalWrite(PIN_SCL, HIGH); delayMicroseconds(5);
-  }
-  Wire.setSDA(PIN_SDA);
-  Wire.setSCL(PIN_SCL);
-  Wire.begin();
-  Wire.setClock(100000);
-  log("Khoi phuc bus I2C");
+bool ArduinoHal::readColor(core::RawColor& out) {
+  // TCS3200 ở sườn TRÁI (TCS34725 đã bỏ sau test lần 1)
+  out.r = tcs3200Channel(LOW, LOW);
+  out.g = tcs3200Channel(HIGH, HIGH);
+  out.b = tcs3200Channel(LOW, HIGH);
+  return out.r || out.g || out.b;  // cả 3 kênh hết thời gian chờ = không có xung (dây OUT lỏng?)
 }
 
 // ---------------------------------------------------------------- động cơ, còi, LED

@@ -11,7 +11,7 @@ struct ServoHal : Hal {
   uint32_t millis() override { return t; }
   uint8_t readLine() override { return 0; }
   bool obstacle(Side) override { return false; }
-  bool readColor(Side, RawColor&) override { return false; }
+  bool readColor(RawColor&) override { return false; }
   void setMotors(int16_t, int16_t) override {}
   void buzzer(bool) override {}
   void led(bool) override {}
